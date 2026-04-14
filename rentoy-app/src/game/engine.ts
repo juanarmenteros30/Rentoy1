@@ -91,6 +91,7 @@ export interface EstadoJuego {
   palosJugadores:        Palo[]
   esperandoEnvio:        boolean
   jugadorPidioEnvio:     number
+  jugadorInicioEnvio:    number   // quien pidió el envío original de esta cadena
   jugadorRespondeEnvio:  number
   bazaCompleta:          boolean
   terminada:             boolean
@@ -126,6 +127,7 @@ export function clonarEstado(e: EstadoJuego): EstadoJuego {
     palosJugadores:        [...e.palosJugadores],
     esperandoEnvio:        e.esperandoEnvio,
     jugadorPidioEnvio:     e.jugadorPidioEnvio,
+    jugadorInicioEnvio:    e.jugadorInicioEnvio,
     jugadorRespondeEnvio:  e.jugadorRespondeEnvio,
     bazaCompleta:          e.bazaCompleta,
     terminada:             e.terminada,
@@ -136,7 +138,12 @@ export function clonarEstado(e: EstadoJuego): EstadoJuego {
 export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
   const n = estado.fase
   let baraja = barajaOpt
-  if (!baraja) baraja = barajar(crearBaraja().filter(c => c.id !== estado.vira.id))
+  if (!baraja) {
+    const yaUsadas = new Set(estado.cartasJugadas.map(c => c.id))
+    yaUsadas.add(estado.vira.id)
+    if (estado.cartaSorteo) yaUsadas.add(estado.cartaSorteo.id)
+    baraja = barajar(crearBaraja().filter(c => !yaUsadas.has(c.id)))
+  }
   for (let j = 0; j < 4; j++)
     estado.manos[j] = baraja.splice(baraja.length - n, n)
   estado.cartasMesa            = [null, null, null, null]
@@ -146,6 +153,7 @@ export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
   estado.bazaCompleta          = false
   estado.esperandoEnvio        = false
   estado.jugadorPidioEnvio     = -1
+  estado.jugadorInicioEnvio    = -1
   estado.jugadorRespondeEnvio  = -1
   estado.valorMano             = 1
 }
@@ -183,6 +191,7 @@ export function crearEstadoInicial(): EstadoJuego {
     jugadorInicioRonda:    jugadorInicio,
     esperandoEnvio:        false,
     jugadorPidioEnvio:     -1,
+    jugadorInicioEnvio:    -1,
     jugadorRespondeEnvio:  -1,
     bazaCompleta:          false,
     puntosAcumuladosFase3: 0,
@@ -246,13 +255,17 @@ export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Acci
   if (estado.esperandoEnvio) {
     if (accion === ACCION.QUIERO) {
       estado.esperandoEnvio = false
-      estado.jugadorActual  = estado.jugadorPidioEnvio
+      // Saca carta quien inició el envío original (no quien lo aceptó)
+      estado.jugadorActual      = estado.jugadorInicioEnvio
+      estado.jugadorInicioEnvio = -1
     } else if (accion === ACCION.ME_VOY) {
       estado.puntos[equipo(estado.jugadorPidioEnvio)] += 1
-      estado.esperandoEnvio = false
+      estado.esperandoEnvio     = false
+      estado.jugadorInicioEnvio = -1
       _comprobarFin(estado)
       if (!estado.terminada) _nuevaFase(estado)
     } else if (accion === ACCION.ENVIO) {
+      // Contraenvío: jugadorInicioEnvio NO se toca, sigue siendo quien pidió primero
       estado.valorMano            = Math.min(estado.valorMano + 3, 12)
       estado.jugadorPidioEnvio    = jugador
       const eqPidio               = equipo(jugador)
@@ -271,6 +284,8 @@ export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Acci
     }
     estado.valorMano            = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 12)
     estado.jugadorPidioEnvio    = jugador
+    // Solo guardar el iniciador si es el primer envío de la cadena
+    if (estado.jugadorInicioEnvio === -1) estado.jugadorInicioEnvio = jugador
     estado.esperandoEnvio       = true
     const eqPidio               = equipo(jugador)
     const responde              = [0,1,2,3].find(j => equipo(j) !== eqPidio)!
@@ -346,6 +361,7 @@ function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
     const nuevoInicio = (inicioRondaAnt + 1) % 4
     const baraja = barajar(crearBaraja())
     estado.vira = baraja[0]
+    estado.cartasJugadas = []
     repartirFase(estado)
     calcularSenasIA(estado)
     estado.jugadorInicioRonda = nuevoInicio
@@ -407,18 +423,11 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
 
     if (alguienGanoDos || todasJugadas) {
       const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
-
-      // Lógica de puntuación fase 3:
-      // - Cada mini-baza acumula su valorMano (1 si sin envío, 3+ si con envío)
-      // - Al final se suma todo lo acumulado + el valorMano de esta última mini-baza
-      // - Si el total es 0 (ninguna mini-baza tuvo envío y no se jugó ninguna previa) = 1 punto base
-      const totalPuntos = estado.puntosAcumuladosFase3 + estado.valorMano
+      const totalPuntos  = estado.puntosAcumuladosFase3 + estado.valorMano
       estado.puntos[eqFase] += totalPuntos
       _comprobarFin(estado)
       if (!estado.terminada) _nuevaFase(estado, ganador)
     } else {
-      // Mini-baza intermedia: acumular su valorMano
-      // Si hubo envío acumula 3+, si no hubo envío acumula 1
       estado.puntosAcumuladosFase3 += estado.valorMano
       estado.cartasMesa        = [null, null, null, null]
       estado.jugadorInicioBaza = ganador
@@ -426,6 +435,7 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
       estado.turno             = ganador
       estado.valorMano         = 1
       estado.jugadorPidioEnvio = -1
+      estado.jugadorInicioEnvio = -1
       estado.esperandoEnvio    = false
     }
   } else {
