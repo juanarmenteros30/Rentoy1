@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Animated, Platform, StatusBar
+  Animated, Platform, StatusBar, useWindowDimensions
 } from 'react-native'
 import { PartidaSinglePlayer, Dificultad } from './src/game/partida'
 import { NOMBRES, ACCION, Carta, Accion, fuerzaCarta } from './src/game/engine'
@@ -9,7 +9,7 @@ import { NOMBRES, ACCION, Carta, Accion, fuerzaCarta } from './src/game/engine'
 const C = {
   mesa: '#1a6b3c', mesaDark: '#145530', oro: '#d4af37',
   rojo: '#c0392b', carta: '#fdfaf0', cartaBorde: '#c8b97a',
-  azul: '#2c5f8a', verde: '#4ade80', blanco: '#ffffff', // verde cambiado para que se vea
+  azul: '#2c5f8a', verde: '#4ade80', blanco: '#ffffff',
   amarillo: '#f59e0b', fondo: '#0f4c25',
 }
 
@@ -26,7 +26,7 @@ const SENA_TEXTO: Record<string,string> = {
 }
 const NOMBRE_JUGADOR = ['Tú','Rival 1','Compañero','Rival 2']
 const COLOR_JUGADOR  = [C.azul, C.rojo, C.verde, C.rojo]
-const DELAY_IA = 2000
+const DELAY_IA = 1300
 
 // ── Animación de Turno (Parpadeo) ─────────────────────────────
 function NombreActivo({ nombre, color, activo, estiloBase }: { nombre: string, color: string, activo: boolean, estiloBase: any }) {
@@ -54,6 +54,7 @@ function NombreActivo({ nombre, color, activo, estiloBase }: { nombre: string, c
   )
 }
 
+// ── Carta Adaptativa ─────────────────────────────
 // ── Carta ────────────────────────────────────────────────────
 function CartaComp({
   carta, seleccionable, onPress, tamaño = 'normal', boca = true, destacada = false, ganadora = false
@@ -68,6 +69,8 @@ function CartaComp({
 }) {
   const anim    = useRef(new Animated.Value(1)).current
   const slideIn = useRef(new Animated.Value(0)).current
+  const { width, height } = useWindowDimensions()
+  const esMovil = width < 768 || height < 850
 
   useEffect(() => {
     if (destacada) {
@@ -78,9 +81,8 @@ function CartaComp({
     }
   }, [destacada])
 
-  // Aumentado el tamaño mini
-  const w = tamaño === 'mini' ? 48 : tamaño === 'grande' ? 80 : 56
-  const h = tamaño === 'mini' ? 70 : tamaño === 'grande' ? 115 : 80
+  const w = tamaño === 'mini' ? (esMovil ? 36 : 48) : tamaño === 'grande' ? (esMovil ? 60 : 80) : (esMovil ? 46 : 56)
+  const h = tamaño === 'mini' ? (esMovil ? 52 : 70) : tamaño === 'grande' ? (esMovil ? 88 : 115) : (esMovil ? 66 : 80)
 
   if (!carta && boca) return <View style={{ width: w, height: h, margin: 3 }} />
 
@@ -95,12 +97,12 @@ function CartaComp({
   const color   = PALO_COLOR[carta.palo]
   const simbolo = PALO_SIMBOLO[carta.palo]
   const nombre  = NOMBRES[carta.valor]
-  const fs      = tamaño === 'mini' ? { val: 12, sim: 22 } : tamaño === 'grande' ? { val: 16, sim: 32 } : { val: 13, sim: 24 }
+  const fs      = tamaño === 'mini' ? { val: esMovil ? 10 : 12, sim: esMovil ? 18 : 22 } : tamaño === 'grande' ? { val: esMovil ? 14 : 16, sim: esMovil ? 26 : 32 } : { val: 12, sim: 20 }
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      onPressIn={() => seleccionable && Animated.spring(anim, { toValue: 0.92, useNativeDriver: true }).start()}
+      onPressIn={() => seleccionable ? Animated.spring(anim, { toValue: 0.92, useNativeDriver: true }).start() : null}
       onPressOut={() => Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start()}
       disabled={!seleccionable}
       activeOpacity={0.9}
@@ -108,20 +110,26 @@ function CartaComp({
       <Animated.View style={[
         estilos.carta,
         { width: w, height: h, transform: [{ scale: anim }, { translateY: slideIn }] },
-        seleccionable && estilos.cartaSeleccionable,
-        destacada && estilos.cartaDestacada,
-        ganadora && estilos.cartaGanadora
+        seleccionable ? estilos.cartaSeleccionable : null,
+        destacada ? estilos.cartaDestacada : null,
+        ganadora ? estilos.cartaGanadora : null
       ]}>
-        <Text style={{ fontWeight: '700', color, fontSize: fs.val, alignSelf: 'flex-start', marginLeft: 2 }}>{nombre}</Text>
-        <Text style={{ color, fontSize: fs.sim }}>{simbolo}</Text>
-        <Text style={{ fontWeight: '700', color, fontSize: fs.val, alignSelf: 'flex-end', marginRight: 2, transform: [{ rotate: '180deg' }] }}>{nombre}</Text>
+        {/* NÚMERO ARRIBA IZQUIERDA (Absoluto) */}
+        <Text style={{ position: 'absolute', top: 2, left: 3, fontWeight: '800', color, fontSize: fs.val }}>{nombre}</Text>
+        
+        {/* SÍMBOLO CENTRADO */}
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color, fontSize: fs.sim }}>{simbolo}</Text>
+        </View>
+        
+        {/* NÚMERO ABAJO DERECHA (Absoluto y rotado) */}
+        <Text style={{ position: 'absolute', bottom: 2, right: 3, fontWeight: '800', color, fontSize: fs.val, transform: [{ rotate: '180deg' }] }}>{nombre}</Text>
       </Animated.View>
     </TouchableOpacity>
   )
 }
-
-// ── Pensando ─────────────────────────────────────────────────
-function Pensando({ jugador }: { jugador: number }) {
+// ── Pensando Reubicado (Abajo a la derecha) ───────────────────────────────────
+function Pensando({ jugador, esMovil }: { jugador: number, esMovil: boolean }) {
   const anim = useRef(new Animated.Value(0.4)).current
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -148,7 +156,7 @@ function PantallaSorteo({ onContinuar, palosJugadores, cartaSorteo, jugadorInici
   const [fase, setFase] = useState<'mesa' | 'sorteo' | 'resultado'>('mesa')
   return (
     <View style={{ flex: 1, backgroundColor: C.fondo, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      {fase === 'mesa' && (
+      {fase === 'mesa' ? (
         <View style={{ width: '100%', maxWidth: 380, alignItems: 'center' }}>
           <Text style={{ color: C.oro, fontSize: 22, fontWeight: '700', marginBottom: 24 }}>Palos asignados</Text>
           <View style={{ width: 280, height: 280, position: 'relative', marginBottom: 32 }}>
@@ -180,16 +188,18 @@ function PantallaSorteo({ onContinuar, palosJugadores, cartaSorteo, jugadorInici
           </View>
           <TouchableOpacity style={estilos.menuBotonJugar} onPress={() => setFase('sorteo')}><Text style={estilos.menuBotonJugarTexto}>Hacer sorteo</Text></TouchableOpacity>
         </View>
-      )}
-      {fase === 'sorteo' && (
+      ) : null}
+
+      {fase === 'sorteo' ? (
         <View style={{ alignItems: 'center', gap: 16 }}>
           <Text style={{ color: C.oro, fontSize: 22, fontWeight: '700' }}>Carta del sorteo</Text>
           <CartaComp carta={cartaSorteo} tamaño="grande" />
           <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15, textAlign: 'center' }}>Palo:{' '}<Text style={{ color: PALO_COLOR[cartaSorteo.palo], fontWeight: '700' }}>{PALO_SIMBOLO[cartaSorteo.palo]} {PALO_LABEL[cartaSorteo.palo]}</Text></Text>
           <TouchableOpacity style={estilos.menuBotonJugar} onPress={() => setFase('resultado')}><Text style={estilos.menuBotonJugarTexto}>Ver quién empieza</Text></TouchableOpacity>
         </View>
-      )}
-      {fase === 'resultado' && (
+      ) : null}
+
+      {fase === 'resultado' ? (
         <View style={{ alignItems: 'center', gap: 16 }}>
           <Text style={{ color: C.oro, fontSize: 22, fontWeight: '700' }}>¡Empieza!</Text>
           <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15, textAlign: 'center', lineHeight: 26 }}>
@@ -202,7 +212,7 @@ function PantallaSorteo({ onContinuar, palosJugadores, cartaSorteo, jugadorInici
           </View>
           <TouchableOpacity style={estilos.menuBotonJugar} onPress={onContinuar}><Text style={estilos.menuBotonJugarTexto}>¡Jugar!</Text></TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </View>
   )
 }
@@ -224,9 +234,9 @@ function PantallaMenu({ onJugar }: { onJugar: (d: Dificultad) => void }) {
         <Text style={estilos.menuLabel}>Dificultad de la IA</Text>
         <View style={estilos.menuDifs}>
           {difs.map(d => (
-            <TouchableOpacity key={d.id} style={[estilos.menuDifBtn, dif === d.id && estilos.menuDifBtnActive]} onPress={() => setDif(d.id)}>
-              <Text style={[estilos.menuDifLabel, dif === d.id && { color: C.blanco }]}>{d.label}</Text>
-              <Text style={[estilos.menuDifDesc,  dif === d.id && { color: 'rgba(255,255,255,0.8)' }]}>{d.desc}</Text>
+            <TouchableOpacity key={d.id} style={[estilos.menuDifBtn, dif === d.id ? estilos.menuDifBtnActive : null]} onPress={() => setDif(d.id)}>
+              <Text style={[estilos.menuDifLabel, dif === d.id ? { color: C.blanco } : null]}>{d.label}</Text>
+              <Text style={[estilos.menuDifDesc,  dif === d.id ? { color: 'rgba(255,255,255,0.8)' } : null]}>{d.desc}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -256,6 +266,9 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
   const procesandoRef = useRef(false)
   const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timerIARef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { width, height } = useWindowDimensions()
+  const esMovil = width < 768 || height < 850
 
   const refrescar = useCallback(() => setTick(t => t + 1), [])
 
@@ -384,7 +397,7 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
     <View style={estilos.juego}>
       <StatusBar barStyle="light-content" backgroundColor={C.mesa} />
 
-      {/* Marcador Estilo Fútbol (Top Left) */}
+      {/* Marcador Estilo TV (Top Left) */}
       <View style={estilos.marcadorTV}>
         <View style={estilos.marcadorEquipo}>
           <Text style={estilos.marcadorNombre}>NOSOTROS</Text>
@@ -400,12 +413,12 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
         </View>
         <View style={estilos.marcadorExtra}>
           <Text style={estilos.marcadorRonda}>R{estado.fase}</Text>
-          {estado.fase === 3 && (
+          {estado.fase === 3 ? (
             <View style={estilos.bazasBadge}>
               <Text style={estilos.bazasTexto}>{estado.bazasGanadas[0]}-{estado.bazasGanadas[1]}</Text>
             </View>
-          )}
-          {estado.valorMano > 1 && <Text style={estilos.marcadorMultiplicador}>×{estado.valorMano}</Text>}
+          ) : null}
+          {estado.valorMano > 1 ? <Text style={estilos.marcadorMultiplicador}>×{estado.valorMano}</Text> : null}
         </View>
       </View>
 
@@ -414,49 +427,51 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
         <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '700' }}>✕ Salir</Text>
       </TouchableOpacity>
 
-      {/* Mesa Simétrica Ampliada */}
+      {/* Mesa Simétrica */}
       <View style={estilos.mesa}>
+        
+        {/* Pensando flotante en la esquina inferior derecha para no solapar */}
+        {pensandoJ !== null ? <Pensando jugador={pensandoJ} esMovil={esMovil} /> : null}
 
-        {pensandoJ !== null && <Pensando jugador={pensandoJ} />}
+        {/* TOP SECTION: Envío Banner + Compañero */}
+        <View style={{ alignItems: 'center', zIndex: 10 }}>
+          {estado.esperandoEnvio ? (
+            <View style={estilos.envioBanner}>
+              <Text style={estilos.envioBannerTxt}>💰 Envío en juego — vale {estado.valorMano} pts</Text>
+            </View>
+          ) : <View style={{ height: 10 }} />}
 
-        {/* Banner de envío centrado arriba */}
-        {estado.esperandoEnvio && (
-          <View style={estilos.envioBanner}>
-            <Text style={estilos.envioBannerTxt}>💰 Envío en juego — vale {estado.valorMano} pts</Text>
-          </View>
-        )}
-
-        {/* Compañero arriba J2 */}
-        <View style={estilos.jugadorArriba}>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <NombreActivo nombre={NOMBRE_JUGADOR[2]} color={COLOR_JUGADOR[2]} activo={estado.jugadorActual === 2 && !estado.esperandoEnvio} estiloBase={estilos.jNombre} />
-            {estado.senas[2] !== 'nada' && <Text style={estilos.senaChip}>{SENA_EMOJI[estado.senas[2]]} {SENA_TEXTO[estado.senas[2]]}</Text>}
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-            {estado.manos[2].map((_, i) => (
-              <View key={i} style={{ marginLeft: i > 0 ? -30 : 0 }}>
-                <CartaComp carta={null} boca={false} tamaño="mini" />
-              </View>
-            ))}
-            {estado.manos[2].length === 0 && <Text style={estilos.sinCartasTxt}>sin cartas</Text>}
+          <View style={estilos.jugadorArriba}>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <NombreActivo nombre={NOMBRE_JUGADOR[2]} color={COLOR_JUGADOR[2]} activo={estado.jugadorActual === 2 && !estado.esperandoEnvio} estiloBase={estilos.jNombre} />
+              {estado.senas[2] !== 'nada' ? <Text style={estilos.senaChip}>{SENA_EMOJI[estado.senas[2]]} {SENA_TEXTO[estado.senas[2]]}</Text> : null}
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+              {estado.manos[2].map((_, i) => (
+                <View key={i} style={{ marginLeft: i > 0 ? (esMovil ? -20 : -30) : 0 }}>
+                  <CartaComp carta={null} boca={false} tamaño="mini" />
+                </View>
+              ))}
+              {estado.manos[2].length === 0 ? <Text style={estilos.sinCartasTxt}>sin cartas</Text> : null}
+            </View>
           </View>
         </View>
 
-        {/* Fila central */}
+        {/* MIDDLE SECTION: Rivales y Mesa Central */}
         <View style={estilos.filaCentral}>
           {/* Rival J1 izquierda */}
           <View style={estilos.jugadorLado}>
             <NombreActivo nombre={NOMBRE_JUGADOR[1]} color={COLOR_JUGADOR[1]} activo={estado.jugadorActual === 1 && !estado.esperandoEnvio} estiloBase={[estilos.jNombreLado, { marginBottom: 4 }]} />
-            <View style={{ alignItems: 'center', paddingTop: 40 }}>
+            <View style={{ alignItems: 'center', paddingTop: esMovil ? 20 : 40 }}>
               {estado.manos[1].map((_, i) => (
-                <View key={i} style={{ marginTop: i > 0 ? -45 : 0 }}>
+                <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
                   <CartaComp carta={null} boca={false} tamaño="mini" />
                 </View>
               ))}
             </View>
           </View>
 
-          {/* Mesa central limpia con espaciado ajustado */}
+          {/* Mesa central limpia con espaciado GIGANTE para proteger la Vira */}
           <View style={estilos.mesaCentro}>
             <View style={{ position: 'absolute', zIndex: 0 }}>
               <View style={{ borderWidth: 3, borderColor: C.amarillo, borderRadius: 10 }}>
@@ -464,27 +479,27 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
               </View>
             </View>
 
-            <View style={[estilos.mesaFila, { zIndex: 1 }]}>
-              {estado.cartasMesa[2] ? <CartaComp carta={estado.cartasMesa[2]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[2]!.id)} ganadora={estado.cartasMesa[2]!.id === idGanadora} /> : <View style={estilos.hueco} />}
+            <View style={[estilos.mesaFila, { zIndex: 1, marginBottom: esMovil ? 15 : 25 }]}>
+              {estado.cartasMesa[2] ? <CartaComp carta={estado.cartasMesa[2]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[2]!.id)} ganadora={estado.cartasMesa[2]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
             
             <View style={[estilos.mesaFila, { justifyContent: 'center', zIndex: 1 }]}>
-              {estado.cartasMesa[1] ? <CartaComp carta={estado.cartasMesa[1]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[1]!.id)} ganadora={estado.cartasMesa[1]!.id === idGanadora} /> : <View style={estilos.hueco} />}
-              <View style={{ width: 70 }} /> {/* Hueco transparente */}
-              {estado.cartasMesa[3] ? <CartaComp carta={estado.cartasMesa[3]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[3]!.id)} ganadora={estado.cartasMesa[3]!.id === idGanadora} /> : <View style={estilos.hueco} />}
+              {estado.cartasMesa[1] ? <CartaComp carta={estado.cartasMesa[1]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[1]!.id)} ganadora={estado.cartasMesa[1]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
+              <View style={{ width: esMovil ? 80 : 100 }} />
+              {estado.cartasMesa[3] ? <CartaComp carta={estado.cartasMesa[3]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[3]!.id)} ganadora={estado.cartasMesa[3]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
             
-            <View style={[estilos.mesaFila, { zIndex: 1 }]}>
-              {estado.cartasMesa[0] ? <CartaComp carta={estado.cartasMesa[0]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[0]!.id)} ganadora={estado.cartasMesa[0]!.id === idGanadora} /> : <View style={estilos.hueco} />}
+            <View style={[estilos.mesaFila, { zIndex: 1, marginTop: esMovil ? 15 : 25 }]}>
+              {estado.cartasMesa[0] ? <CartaComp carta={estado.cartasMesa[0]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[0]!.id)} ganadora={estado.cartasMesa[0]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
           </View>
 
           {/* Rival J3 derecha */}
           <View style={estilos.jugadorLado}>
             <NombreActivo nombre={NOMBRE_JUGADOR[3]} color={COLOR_JUGADOR[3]} activo={estado.jugadorActual === 3 && !estado.esperandoEnvio} estiloBase={[estilos.jNombreLado, { marginBottom: 4 }]} />
-            <View style={{ alignItems: 'center', paddingTop: 40 }}>
+            <View style={{ alignItems: 'center', paddingTop: esMovil ? 20 : 40 }}>
               {estado.manos[3].map((_, i) => (
-                <View key={i} style={{ marginTop: i > 0 ? -45 : 0 }}>
+                <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
                   <CartaComp carta={null} boca={false} tamaño="mini" />
                 </View>
               ))}
@@ -492,40 +507,43 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
           </View>
         </View>
 
-        {/* Jugador Abajo (Humano) Simétrico */}
-        <View style={estilos.jugadorAbajo}>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 6, gap: 10 }}>
-            <NombreActivo nombre={`${NOMBRE_JUGADOR[0]}${partida.esTurnoHumano ? ' — tu turno' : ''}`} color={COLOR_JUGADOR[0]} activo={partida.esTurnoHumano && !estado.esperandoEnvio} estiloBase={estilos.jNombre} />
-            {estado.esperandoEnvio && partida.esTurnoHumano && <Text style={{ color: C.oro, fontSize: 12, fontWeight: '700' }}>¡Responde al envío!</Text>}
+        {/* BOTTOM SECTION: Historial + Jugador Humano */}
+        <View style={{ width: '100%', zIndex: 10 }}>
+          <View style={estilos.logContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {log.map((msg, i) => <Text key={i} style={[estilos.logTxt, i === 0 ? estilos.logTxtReciente : null]}>{msg}</Text>)}
+            </ScrollView>
           </View>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-            {estado.manos[0].map((carta, index) => {
-              const jugable = cartasJugables.includes(carta.id) && !bloqueado
-              return (
-                <View key={carta.id} style={{ marginLeft: index > 0 ? -30 : 0 }}>
-                  <CartaComp carta={carta} seleccionable={jugable} onPress={() => jugable && jugar(carta.id)} tamaño="grande" />
-                </View>
-              )
-            })}
-          </View>
+          <View style={estilos.jugadorAbajo}>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 6, gap: 10 }}>
+              <NombreActivo nombre={`${NOMBRE_JUGADOR[0]}${partida.esTurnoHumano ? ' — tu turno' : ''}`} color={COLOR_JUGADOR[0]} activo={partida.esTurnoHumano && !estado.esperandoEnvio} estiloBase={estilos.jNombre} />
+              {estado.esperandoEnvio && partida.esTurnoHumano ? <Text style={{ color: C.oro, fontSize: 12, fontWeight: '700' }}>¡Responde al envío!</Text> : null}
+            </View>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {puedeEnvio  && !bloqueado && <TouchableOpacity style={[estilos.btn, { backgroundColor: C.amarillo }]} onPress={() => jugar(ACCION.ENVIO)}><Text style={estilos.btnTxt}>💰 Envío</Text></TouchableOpacity>}
-            {puedeQuiero && !bloqueado && <TouchableOpacity style={[estilos.btn, { backgroundColor: '#16a34a' }]} onPress={() => jugar(ACCION.QUIERO)}><Text style={estilos.btnTxt}>✅ Quiero</Text></TouchableOpacity>}
-            {puedeMeVoy  && !bloqueado && <TouchableOpacity style={[estilos.btn, { backgroundColor: C.rojo }]} onPress={() => jugar(ACCION.ME_VOY)}><Text style={estilos.btnTxt}>❌ Me voy</Text></TouchableOpacity>}
-            {puedeFarol  && !bloqueado && <TouchableOpacity style={[estilos.btn, { backgroundColor: '#7c3aed' }]} onPress={() => jugar(ACCION.FAROL)}><Text style={estilos.btnTxt}>😈 Farol</Text></TouchableOpacity>}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+              {estado.manos[0].map((carta, index) => {
+                const jugable = cartasJugables.includes(carta.id) && !bloqueado
+                return (
+                  <View key={carta.id} style={{ marginLeft: index > 0 ? (esMovil ? -20 : -30) : 0 }}>
+                    <CartaComp carta={carta} seleccionable={jugable} onPress={() => jugable && jugar(carta.id)} tamaño="grande" />
+                  </View>
+                )
+              })}
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {puedeEnvio  && !bloqueado ? <TouchableOpacity style={[estilos.btn, { backgroundColor: C.amarillo }]} onPress={() => jugar(ACCION.ENVIO)}><Text style={estilos.btnTxt}>💰 Envío</Text></TouchableOpacity> : null}
+              {puedeQuiero && !bloqueado ? <TouchableOpacity style={[estilos.btn, { backgroundColor: '#16a34a' }]} onPress={() => jugar(ACCION.QUIERO)}><Text style={estilos.btnTxt}>✅ Quiero</Text></TouchableOpacity> : null}
+              {puedeMeVoy  && !bloqueado ? <TouchableOpacity style={[estilos.btn, { backgroundColor: C.rojo }]} onPress={() => jugar(ACCION.ME_VOY)}><Text style={estilos.btnTxt}>❌ Me voy</Text></TouchableOpacity> : null}
+              {puedeFarol  && !bloqueado ? <TouchableOpacity style={[estilos.btn, { backgroundColor: '#7c3aed' }]} onPress={() => jugar(ACCION.FAROL)}><Text style={estilos.btnTxt}>😈 Farol</Text></TouchableOpacity> : null}
+            </View>
           </View>
         </View>
-
-        {/* Historial redimensionado */}
-        <ScrollView style={estilos.log} showsVerticalScrollIndicator={false}>
-          {log.map((msg, i) => <Text key={i} style={[estilos.logTxt, i === 0 && estilos.logTxtReciente]}>{msg}</Text>)}
-        </ScrollView>
       </View>
 
       {/* Modal fin */}
-      {ganadorModal && (
+      {ganadorModal ? (
         <View style={estilos.modal}>
           <View style={estilos.modalCaja}>
             <Text style={{ fontSize: 56, marginBottom: 8 }}>{ganadorModal.ganador === 0 ? '🏆' : '😔'}</Text>
@@ -540,7 +558,7 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
             <TouchableOpacity onPress={onVolver}><Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Menú principal</Text></TouchableOpacity>
           </View>
         </View>
-      )}
+      ) : null}
     </View>
   )
 }
@@ -588,7 +606,7 @@ const estilos = StyleSheet.create({
   juego:  { flex: 1, backgroundColor: C.mesa },
   
   marcadorTV: {
-    position: 'absolute', top: Platform.OS === 'android' ? 36 : 48, left: 16, zIndex: 50,
+    position: 'absolute', top: Platform.OS === 'android' ? 40 : 48, left: 16, zIndex: 50,
     flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 8, overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'stretch'
   },
@@ -603,7 +621,7 @@ const estilos = StyleSheet.create({
   bazasTexto: { color: C.blanco, fontSize: 11, fontWeight: '800' },
 
   botonVolver: {
-    position: 'absolute', top: Platform.OS === 'android' ? 36 : 48, right: 16, zIndex: 50,
+    position: 'absolute', top: Platform.OS === 'android' ? 40 : 48, right: 16, zIndex: 50,
     backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8
   },
 
@@ -611,13 +629,15 @@ const estilos = StyleSheet.create({
     flex: 1, backgroundColor: C.mesa, paddingTop: Platform.OS === 'android' ? 90 : 100, 
     paddingBottom: 10, paddingHorizontal: 10, justifyContent: 'space-between'
   },
+  
+  // PENSANDO REUBICADO PARA NO SOLAPAR
   pensando: {
-    position: 'absolute', top: Platform.OS === 'android' ? 90 : 100, left: 16, zIndex: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
+    position: 'absolute', bottom: 110, right: 16, zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
   },
   pensandoTxt:    { color: C.oro, fontSize: 12, fontWeight: '600' },
   
-  envioBanner:    { position: 'absolute', top: Platform.OS === 'android' ? 36 : 48, alignSelf: 'center', zIndex: 50 },
+  envioBanner:    { alignSelf: 'center', marginBottom: 10, zIndex: 50 },
   envioBannerTxt: {
     backgroundColor: 'rgba(213,163,0,0.95)', color: '#1a0a00',
     fontSize: 13, fontWeight: '800', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20,
@@ -637,9 +657,9 @@ const estilos = StyleSheet.create({
   jNombreLado:  { fontSize: 14, fontWeight: '800', textAlign: 'center' },
   mesaCentro:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   mesaFila:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  hueco:        { width: 56, height: 80, margin: 3, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', borderStyle: 'dashed' },
+  hueco:        { margin: 3, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', borderStyle: 'dashed' },
   
-  log:            { position: 'absolute', bottom: 15, left: 15, maxHeight: 90, width: 220, zIndex: 20 },
+  logContainer:   { height: 60, width: '100%', paddingLeft: 10, marginBottom: 5 },
   logTxt:         { color: 'rgba(255,255,255,0.6)', fontSize: 12, paddingVertical: 2 },
   logTxtReciente: { color: 'rgba(255,255,255,1)', fontSize: 13, fontWeight: '700' },
   
