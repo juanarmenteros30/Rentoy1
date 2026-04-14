@@ -217,9 +217,12 @@ export function accionesLegales(estado: EstadoJuego, jugador: number): Accion[] 
   const legales: Accion[] = []
 
   if (estado.esperandoEnvio) {
+    // Solo puede subir el envío si no es quien lo inició originalmente
+    // y si el valorMano aún no ha llegado al máximo (12)
+    if (!es2929(estado) && estado.valorMano < 12 && jugador !== estado.jugadorInicioEnvio)
+      legales.push(ACCION.ENVIO)
     legales.push(ACCION.QUIERO)
     legales.push(ACCION.ME_VOY)
-    if (!es2929(estado)) legales.push(ACCION.ENVIO)
     return legales
   }
 

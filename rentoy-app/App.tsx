@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Animated, Platform, StatusBar, useWindowDimensions
+  Animated, Platform, StatusBar, useWindowDimensions, Image
 } from 'react-native'
 import { PartidaSinglePlayer, Dificultad } from './src/game/partida'
 import { NOMBRES, ACCION, Carta, Accion, fuerzaCarta } from './src/game/engine'
@@ -27,6 +27,14 @@ const SENA_TEXTO: Record<string,string> = {
 const NOMBRE_JUGADOR = ['Tú','Rival 1','Compañero','Rival 2']
 const COLOR_JUGADOR  = [C.azul, C.rojo, C.verde, C.rojo]
 const DELAY_IA = 1300
+
+// ── Mapa de imágenes de cartas ────────────────────────────────
+// Clave: 'valor_palo' (igual que carta.id)
+// Añade aquí nuevas imágenes cuando las tengas
+const CARTA_IMAGEN: Record<string, any> = {
+  '1_oros': require('./assets/Aoro.png'),
+  '2_oros': require('./assets/2oro.png'),
+}
 
 // ── Animación de Turno (Parpadeo) ─────────────────────────────
 function NombreActivo({ nombre, color, activo, estiloBase }: { nombre: string, color: string, activo: boolean, estiloBase: any }) {
@@ -54,7 +62,6 @@ function NombreActivo({ nombre, color, activo, estiloBase }: { nombre: string, c
   )
 }
 
-// ── Carta Adaptativa ─────────────────────────────
 // ── Carta ────────────────────────────────────────────────────
 function CartaComp({
   carta, seleccionable, onPress, tamaño = 'normal', boca = true, destacada = false, ganadora = false
@@ -94,6 +101,38 @@ function CartaComp({
     )
   }
 
+  if (!carta) return <View style={{ width: w, height: h, margin: 3 }} />
+
+  const imagenCarta = CARTA_IMAGEN[carta.id]
+
+  // Si hay imagen real para esta carta, mostrarla
+  if (imagenCarta) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={() => seleccionable ? Animated.spring(anim, { toValue: 0.92, useNativeDriver: true }).start() : null}
+        onPressOut={() => Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start()}
+        disabled={!seleccionable}
+        activeOpacity={0.9}
+      >
+        <Animated.View style={[
+          estilos.carta,
+          { width: w, height: h, transform: [{ scale: anim }, { translateY: slideIn }], padding: 0, overflow: 'hidden' },
+          seleccionable ? estilos.cartaSeleccionable : null,
+          destacada ? estilos.cartaDestacada : null,
+          ganadora ? estilos.cartaGanadora : null,
+        ]}>
+          <Image
+            source={imagenCarta}
+            style={{ width: '100%', height: '100%', borderRadius: 5 }}
+            resizeMode="cover"
+          />
+        </Animated.View>
+      </TouchableOpacity>
+    )
+  }
+
+  // Carta sin imagen: diseño genérico
   const color   = PALO_COLOR[carta.palo]
   const simbolo = PALO_SIMBOLO[carta.palo]
   const nombre  = NOMBRES[carta.valor]
@@ -112,23 +151,19 @@ function CartaComp({
         { width: w, height: h, transform: [{ scale: anim }, { translateY: slideIn }] },
         seleccionable ? estilos.cartaSeleccionable : null,
         destacada ? estilos.cartaDestacada : null,
-        ganadora ? estilos.cartaGanadora : null
+        ganadora ? estilos.cartaGanadora : null,
       ]}>
-        {/* NÚMERO ARRIBA IZQUIERDA (Absoluto) */}
         <Text style={{ position: 'absolute', top: 2, left: 3, fontWeight: '800', color, fontSize: fs.val }}>{nombre}</Text>
-        
-        {/* SÍMBOLO CENTRADO */}
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color, fontSize: fs.sim }}>{simbolo}</Text>
         </View>
-        
-        {/* NÚMERO ABAJO DERECHA (Absoluto y rotado) */}
         <Text style={{ position: 'absolute', bottom: 2, right: 3, fontWeight: '800', color, fontSize: fs.val, transform: [{ rotate: '180deg' }] }}>{nombre}</Text>
       </Animated.View>
     </TouchableOpacity>
   )
 }
-// ── Pensando Reubicado (Abajo a la derecha) ───────────────────────────────────
+
+// ── Pensando ───────────────────────────────────────────────────
 function Pensando({ jugador, esMovil }: { jugador: number, esMovil: boolean }) {
   const anim = useRef(new Animated.Value(0.4)).current
   useEffect(() => {
@@ -364,19 +399,18 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
   const puedeFarol     = accionesHumano.includes(ACCION.FAROL)
   const bloqueado      = pensandoJ !== null || (!partida.esTurnoHumano && !partida.terminada)
 
-  // --- LÓGICA GANADORA ---
-  const viraPalo = estado.vira.palo;
-  let idGanadora: string | null = null;
+  const viraPalo = estado.vira.palo
+  let idGanadora: string | null = null
   if (estado.cartasMesa.some(c => c !== null)) {
-    const subviraPalo = estado.cartasMesa[estado.jugadorInicioBaza]?.palo || estado.cartasMesa.find(c => c !== null)!.palo;
-    const hayVira = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo);
-    const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12];
-    let maxF = -1;
+    const subviraPalo = estado.cartasMesa[estado.jugadorInicioBaza]?.palo || estado.cartasMesa.find(c => c !== null)!.palo
+    const hayVira = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
+    const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
+    let maxF = -1
     for (let j = 0; j < 4; j++) {
-      const c = estado.cartasMesa[j];
-      if (!c) continue;
-      let f = hayVira ? fuerzaCarta(c, viraPalo) : (c.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(c.valor));
-      if (f > maxF) { maxF = f; idGanadora = c.id; }
+      const c = estado.cartasMesa[j]
+      if (!c) continue
+      const f = hayVira ? fuerzaCarta(c, viraPalo) : (c.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(c.valor))
+      if (f > maxF) { maxF = f; idGanadora = c.id }
     }
   }
 
@@ -397,7 +431,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
     <View style={estilos.juego}>
       <StatusBar barStyle="light-content" backgroundColor={C.mesa} />
 
-      {/* Marcador Estilo TV (Top Left) */}
       <View style={estilos.marcadorTV}>
         <View style={estilos.marcadorEquipo}>
           <Text style={estilos.marcadorNombre}>NOSOTROS</Text>
@@ -422,18 +455,13 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
         </View>
       </View>
 
-      {/* Botón Salir (Top Right) */}
       <TouchableOpacity onPress={onVolver} style={estilos.botonVolver}>
         <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '700' }}>✕ Salir</Text>
       </TouchableOpacity>
 
-      {/* Mesa Simétrica */}
       <View style={estilos.mesa}>
-        
-        {/* Pensando flotante en la esquina inferior derecha para no solapar */}
         {pensandoJ !== null ? <Pensando jugador={pensandoJ} esMovil={esMovil} /> : null}
 
-        {/* TOP SECTION: Envío Banner + Compañero */}
         <View style={{ alignItems: 'center', zIndex: 10 }}>
           {estado.esperandoEnvio ? (
             <View style={estilos.envioBanner}>
@@ -457,9 +485,7 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
           </View>
         </View>
 
-        {/* MIDDLE SECTION: Rivales y Mesa Central */}
         <View style={estilos.filaCentral}>
-          {/* Rival J1 izquierda */}
           <View style={estilos.jugadorLado}>
             <NombreActivo nombre={NOMBRE_JUGADOR[1]} color={COLOR_JUGADOR[1]} activo={estado.jugadorActual === 1 && !estado.esperandoEnvio} estiloBase={[estilos.jNombreLado, { marginBottom: 4 }]} />
             <View style={{ alignItems: 'center', paddingTop: esMovil ? 20 : 40 }}>
@@ -471,7 +497,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
             </View>
           </View>
 
-          {/* Mesa central limpia con espaciado GIGANTE para proteger la Vira */}
           <View style={estilos.mesaCentro}>
             <View style={{ position: 'absolute', zIndex: 0 }}>
               <View style={{ borderWidth: 3, borderColor: C.amarillo, borderRadius: 10 }}>
@@ -482,19 +507,16 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
             <View style={[estilos.mesaFila, { zIndex: 1, marginBottom: esMovil ? 15 : 25 }]}>
               {estado.cartasMesa[2] ? <CartaComp carta={estado.cartasMesa[2]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[2]!.id)} ganadora={estado.cartasMesa[2]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
-            
             <View style={[estilos.mesaFila, { justifyContent: 'center', zIndex: 1 }]}>
               {estado.cartasMesa[1] ? <CartaComp carta={estado.cartasMesa[1]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[1]!.id)} ganadora={estado.cartasMesa[1]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
               <View style={{ width: esMovil ? 80 : 100 }} />
               {estado.cartasMesa[3] ? <CartaComp carta={estado.cartasMesa[3]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[3]!.id)} ganadora={estado.cartasMesa[3]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
-            
             <View style={[estilos.mesaFila, { zIndex: 1, marginTop: esMovil ? 15 : 25 }]}>
               {estado.cartasMesa[0] ? <CartaComp carta={estado.cartasMesa[0]} tamaño="normal" destacada={cartasNuevas.has(estado.cartasMesa[0]!.id)} ganadora={estado.cartasMesa[0]!.id === idGanadora} /> : <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />}
             </View>
           </View>
 
-          {/* Rival J3 derecha */}
           <View style={estilos.jugadorLado}>
             <NombreActivo nombre={NOMBRE_JUGADOR[3]} color={COLOR_JUGADOR[3]} activo={estado.jugadorActual === 3 && !estado.esperandoEnvio} estiloBase={[estilos.jNombreLado, { marginBottom: 4 }]} />
             <View style={{ alignItems: 'center', paddingTop: esMovil ? 20 : 40 }}>
@@ -507,7 +529,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
           </View>
         </View>
 
-        {/* BOTTOM SECTION: Historial + Jugador Humano */}
         <View style={{ width: '100%', zIndex: 10 }}>
           <View style={estilos.logContainer}>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -542,7 +563,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
         </View>
       </View>
 
-      {/* Modal fin */}
       {ganadorModal ? (
         <View style={estilos.modal}>
           <View style={estilos.modalCaja}>
@@ -563,7 +583,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
   )
 }
 
-// ── App ───────────────────────────────────────────────────────
 export default function App() {
   const [pantalla,   setPantalla]   = useState<'menu'|'juego'>('menu')
   const [dificultad, setDificultad] = useState<Dificultad>('medio')
@@ -572,7 +591,6 @@ export default function App() {
   return <PantallaMenu onJugar={d => { setDificultad(d); setPantalla('juego') }} />
 }
 
-// ── Estilos ───────────────────────────────────────────────────
 const estilos = StyleSheet.create({
   carta: {
     backgroundColor: C.carta, borderRadius: 7, borderWidth: 1.5,
@@ -584,7 +602,6 @@ const estilos = StyleSheet.create({
   cartaGanadora:      { borderColor: '#00e676', borderWidth: 3, shadowColor: '#00e676', shadowOpacity: 1, shadowRadius: 10, elevation: 10, transform: [{ scale: 1.05 }] },
   cartaDorso: { backgroundColor: '#ffffff', borderRadius: 7, borderWidth: 1.5, borderColor: '#cccccc', padding: 2, margin: 3, alignItems: 'center', justifyContent: 'center' },
   cartaDorsoInner: { flex: 1, width: '100%', height: '100%', backgroundColor: '#c0392b', borderRadius: 4 },
-  
   menu:          { flex: 1, backgroundColor: C.fondo, alignItems: 'center', justifyContent: 'center', padding: 24 },
   menuTitulo:    { fontSize: 52, fontWeight: '700', color: C.oro, letterSpacing: 2 },
   menuSubtitulo: { fontSize: 18, color: '#9fceaa', marginBottom: 40, letterSpacing: 4 },
@@ -602,9 +619,7 @@ const estilos = StyleSheet.create({
   menuBotonJugar:      { backgroundColor: C.oro, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 60, marginBottom: 24 },
   menuBotonJugarTexto: { color: '#1a0a00', fontSize: 20, fontWeight: '700' },
   menuInfoTexto:       { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
-
   juego:  { flex: 1, backgroundColor: C.mesa },
-  
   marcadorTV: {
     position: 'absolute', top: Platform.OS === 'android' ? 40 : 48, left: 16, zIndex: 50,
     flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 8, overflow: 'hidden',
@@ -619,33 +634,27 @@ const estilos = StyleSheet.create({
   marcadorMultiplicador: { color: C.oro, fontSize: 12, fontWeight: '900' },
   bazasBadge: { backgroundColor: '#e74c3c', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 },
   bazasTexto: { color: C.blanco, fontSize: 11, fontWeight: '800' },
-
   botonVolver: {
     position: 'absolute', top: Platform.OS === 'android' ? 40 : 48, right: 16, zIndex: 50,
     backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8
   },
-
   mesa: {
-    flex: 1, backgroundColor: C.mesa, paddingTop: Platform.OS === 'android' ? 90 : 100, 
+    flex: 1, backgroundColor: C.mesa, paddingTop: Platform.OS === 'android' ? 90 : 100,
     paddingBottom: 10, paddingHorizontal: 10, justifyContent: 'space-between'
   },
-  
-  // PENSANDO REUBICADO PARA NO SOLAPAR
   pensando: {
     position: 'absolute', bottom: 110, right: 16, zIndex: 20,
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
   },
   pensandoTxt:    { color: C.oro, fontSize: 12, fontWeight: '600' },
-  
   envioBanner:    { alignSelf: 'center', marginBottom: 10, zIndex: 50 },
   envioBannerTxt: {
     backgroundColor: 'rgba(213,163,0,0.95)', color: '#1a0a00',
     fontSize: 13, fontWeight: '800', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20,
     borderWidth: 1.5, borderColor: '#fff'
   },
-  
   jugadorArriba: { alignItems: 'center', zIndex: 10 },
-  jugadorAbajo: { alignItems: 'center', zIndex: 10 },
+  jugadorAbajo:  { alignItems: 'center', zIndex: 10 },
   jNombre:       { fontSize: 15, fontWeight: '800' },
   senaChip:      {
     fontSize: 11, color: 'rgba(255,255,255,0.85)',
@@ -658,11 +667,9 @@ const estilos = StyleSheet.create({
   mesaCentro:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   mesaFila:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   hueco:        { margin: 3, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', borderStyle: 'dashed' },
-  
   logContainer:   { height: 60, width: '100%', paddingLeft: 10, marginBottom: 5 },
   logTxt:         { color: 'rgba(255,255,255,0.6)', fontSize: 12, paddingVertical: 2 },
   logTxtReciente: { color: 'rgba(255,255,255,1)', fontSize: 13, fontWeight: '700' },
-  
   btn:    { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 9, alignItems: 'center', minWidth: 80, elevation: 4 },
   btnTxt: { color: C.blanco, fontSize: 13, fontWeight: '700' },
   modal:  {
