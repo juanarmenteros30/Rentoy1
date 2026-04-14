@@ -134,7 +134,6 @@ export function clonarEstado(e: EstadoJuego): EstadoJuego {
 }
 
 export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
-  if (Math.max(...estado.puntos) >= 21) estado.fase = 3
   const n = estado.fase
   let baraja = barajaOpt
   if (!baraja) baraja = barajar(crearBaraja().filter(c => c.id !== estado.vira.id))
@@ -356,8 +355,14 @@ function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
   const inicioRondaAnt = estado.jugadorInicioRonda
 
   const maxPts = Math.max(...estado.puntos)
-  if (maxPts >= 21) estado.fase = 3
-  else estado.fase = ((estado.fase % 3) + 1) as 1|2|3
+  if (maxPts >= 21) {
+    // A partir de 21 puntos siempre se reparten 3 cartas
+    // pero solo cuando termina la ronda actual (fase 3 completada)
+    // — aquí ya estamos en _nuevaFase, así que la ronda anterior terminó
+    estado.fase = 3
+  } else {
+    estado.fase = ((estado.fase % 3) + 1) as 1|2|3
+  }
 
   if (estado.fase === 1) {
     const nuevoInicio = (inicioRondaAnt + 1) % 4
