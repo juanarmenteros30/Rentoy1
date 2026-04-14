@@ -26,7 +26,7 @@ const SENA_TEXTO: Record<string,string> = {
 }
 const NOMBRE_JUGADOR = ['Tú','Rival 1','Compañero','Rival 2']
 const COLOR_JUGADOR  = [C.azul, C.rojo, C.verde, C.rojo]
-const DELAY_IA = 900
+const DELAY_IA = 1800
 
 // ── Carta ────────────────────────────────────────────────────
 function CartaComp({
