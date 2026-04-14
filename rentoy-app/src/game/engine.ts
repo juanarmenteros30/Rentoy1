@@ -317,8 +317,8 @@ export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Acci
 
 function _resolverBaza(estado: EstadoJuego): void {
   const viraPalo      = estado.vira.palo
-  const primeraIdx    = estado.cartasMesa.findIndex(c => c !== null)
-  const subviraPalo   = estado.cartasMesa[primeraIdx]!.palo
+  // ARREGLO: La subvira la marca quien inicia la baza
+  const subviraPalo   = estado.cartasMesa[estado.jugadorInicioBaza]!.palo
   const hayVira       = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
   const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
 
@@ -397,8 +397,8 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
   estado.bazaCompleta = false
 
   const viraPalo      = estado.vira.palo
-  const primeraIdx    = estado.cartasMesa.findIndex(c => c !== null)
-  const subviraPalo   = estado.cartasMesa[primeraIdx]!.palo
+  // ARREGLO: La subvira la marca quien inicia la baza
+  const subviraPalo   = estado.cartasMesa[estado.jugadorInicioBaza]!.palo
   const hayVira       = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
   const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
 
