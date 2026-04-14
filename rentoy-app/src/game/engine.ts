@@ -74,7 +74,7 @@ export interface EstadoJuego {
   manos:                 Carta[][]
   vira:                  Carta
   jugadorActual:         number
-  jugadorInicioPartida:  number   // quién empezó la partida — no cambia nunca
+  jugadorInicioPartida:  number
   turno:                 number
   fase:                  1 | 2 | 3
   miniRonda:             number
@@ -159,31 +159,17 @@ export function crearEstadoInicial(): EstadoJuego {
   const baraja = barajar(crearBaraja())
   const vira   = baraja.pop()!
 
-  // Palos asignados aleatoriamente: palosAleatorios[j] = palo del jugador j
   const palosAleatorios = barajar([...PALOS]) as Palo[]
-
-  // Carta de sorteo
-  const cartaSorteo = baraja.pop()!
-  const paloSorteo  = cartaSorteo.palo
-
-  // Jugador al que le corresponde ese palo
-  const jugadorConPalo = palosAleatorios.indexOf(paloSorteo)
-
-  // Mesa visual: J0=abajo, J1=izquierda, J2=arriba, J3=derecha
-  // Sentido horario visto desde arriba: J0 → J3 → J2 → J1 → J0
-  // El de la derecha de cada jugador:
-  //   derecha de J0 = J3
-  //   derecha de J1 = J0
-  //   derecha de J2 = J1
-  //   derecha de J3 = J2
-  const derechaDeJ = [3, 0, 1, 2]
-  const jugadorInicio = derechaDeJ[jugadorConPalo]
+  const cartaSorteo     = baraja.pop()!
+  const jugadorConPalo  = palosAleatorios.indexOf(cartaSorteo.palo)
+  const derechaDeJ      = [3, 0, 1, 2]
+  const jugadorInicio   = derechaDeJ[jugadorConPalo]
 
   const estado: EstadoJuego = {
     manos:                 [[], [], [], []],
     vira,
     jugadorActual:         jugadorInicio,
-    jugadorInicioPartida:  jugadorInicio,   // guardado fijo para la UI del sorteo
+    jugadorInicioPartida:  jugadorInicio,
     turno:                 jugadorInicio,
     fase:                  1,
     miniRonda:             0,
@@ -208,13 +194,10 @@ export function crearEstadoInicial(): EstadoJuego {
 
   repartirFase(estado, baraja)
   calcularSenasIA(estado)
-
-  // Restaurar tras repartirFase por si acaso
   estado.jugadorActual      = jugadorInicio
   estado.jugadorInicioBaza  = jugadorInicio
   estado.jugadorInicioRonda = jugadorInicio
   estado.turno              = jugadorInicio
-
   return estado
 }
 
@@ -247,7 +230,6 @@ export function accionesLegales(estado: EstadoJuego, jugador: number): Accion[] 
 }
 
 function siguienteEnBaza(estado: EstadoJuego, desde: number): number {
-  // Sentido de juego: J0→J3→J2→J1→J0
   const SIG: Record<number, number> = { 0: 3, 3: 2, 2: 1, 1: 0 }
   let actual = desde
   for (let i = 0; i < 4; i++) {
@@ -339,7 +321,6 @@ function _resolverBaza(estado: EstadoJuego): void {
   }
 
   const eqGanador = equipo(ganador)
-
   estado.bazaCompleta      = true
   estado.jugadorActual     = -1
   estado.jugadorInicioBaza = ganador
@@ -356,9 +337,6 @@ function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
 
   const maxPts = Math.max(...estado.puntos)
   if (maxPts >= 21) {
-    // A partir de 21 puntos siempre se reparten 3 cartas
-    // pero solo cuando termina la ronda actual (fase 3 completada)
-    // — aquí ya estamos en _nuevaFase, así que la ronda anterior terminó
     estado.fase = 3
   } else {
     estado.fase = ((estado.fase % 3) + 1) as 1|2|3
@@ -426,13 +404,21 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
   if (estado.fase === 3) {
     const alguienGanoDos = Math.max(...estado.bazasGanadas) >= 2
     const todasJugadas   = estado.miniRonda >= 3
+
     if (alguienGanoDos || todasJugadas) {
       const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
+
+      // Lógica de puntuación fase 3:
+      // - Cada mini-baza acumula su valorMano (1 si sin envío, 3+ si con envío)
+      // - Al final se suma todo lo acumulado + el valorMano de esta última mini-baza
+      // - Si el total es 0 (ninguna mini-baza tuvo envío y no se jugó ninguna previa) = 1 punto base
       const totalPuntos = estado.puntosAcumuladosFase3 + estado.valorMano
       estado.puntos[eqFase] += totalPuntos
       _comprobarFin(estado)
       if (!estado.terminada) _nuevaFase(estado, ganador)
     } else {
+      // Mini-baza intermedia: acumular su valorMano
+      // Si hubo envío acumula 3+, si no hubo envío acumula 1
       estado.puntosAcumuladosFase3 += estado.valorMano
       estado.cartasMesa        = [null, null, null, null]
       estado.jugadorInicioBaza = ganador
