@@ -1,39 +1,23 @@
-// ─────────────────────────────────────────────────────────────
-//  RENTOY SANLUQUEÑO — Motor del juego
-//  Traducción exacta de la lógica Python al TypeScript
-// ─────────────────────────────────────────────────────────────
-
 export const PALOS = ['oros', 'copas', 'espadas', 'bastos'] as const
 export type Palo = typeof PALOS[number]
-
 export const VALORES = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12] as const
 export type Valor = typeof VALORES[number]
 
-// Orden de fuerza: vira (3 débil → 2 fuerte) y no-vira (2 débil → K fuerte)
 const ORDEN_VIRA    = [3, 4, 5, 6, 7, 1, 10, 11, 12, 2]
 const ORDEN_NO_VIRA = [2, 3, 4, 5, 6, 7,  1, 10, 11, 12]
 
 export const NOMBRES: Record<number, string> = {
-  1: 'A', 2: '2', 3: '3', 4: '4', 5: '5',
-  6: '6', 7: '7', 10: 'J', 11: 'Q', 12: 'K',
+  1:'A', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 10:'J', 11:'Q', 12:'K'
 }
 
-// ── Carta ────────────────────────────────────────────────────
-
-export interface Carta {
-  valor: Valor
-  palo:  Palo
-  id:    string   // ej. "2_oros"
-}
+export interface Carta { valor: Valor; palo: Palo; id: string }
 
 export function crearCarta(valor: Valor, palo: Palo): Carta {
   return { valor, palo, id: `${valor}_${palo}` }
 }
 
 export function fuerzaCarta(carta: Carta, viraPalo: Palo): number {
-  if (carta.palo === viraPalo) {
-    return 100 + ORDEN_VIRA.indexOf(carta.valor)
-  }
+  if (carta.palo === viraPalo) return 100 + ORDEN_VIRA.indexOf(carta.valor)
   return ORDEN_NO_VIRA.indexOf(carta.valor)
 }
 
@@ -41,20 +25,14 @@ export function nombreCarta(carta: Carta): string {
   return `${NOMBRES[carta.valor]} de ${carta.palo}`
 }
 
-export function cartasIguales(a: Carta, b: Carta): boolean {
-  return a.id === b.id
-}
-
-// ── Baraja ───────────────────────────────────────────────────
+export function cartasIguales(a: Carta, b: Carta): boolean { return a.id === b.id }
 
 export function crearBaraja(): Carta[] {
-  const baraja: Carta[] = []
-  for (const palo of PALOS) {
-    for (const valor of VALORES) {
-      baraja.push(crearCarta(valor, palo))
-    }
-  }
-  return baraja
+  const b: Carta[] = []
+  for (const palo of PALOS)
+    for (const valor of VALORES)
+      b.push(crearCarta(valor, palo))
+  return b
 }
 
 export function barajar<T>(arr: T[]): T[] {
@@ -66,361 +44,406 @@ export function barajar<T>(arr: T[]): T[] {
   return a
 }
 
-// ── Señas ────────────────────────────────────────────────────
-
 export const SENAS = {
-  NADA:         'nada',          // abrir/cerrar labios
-  TRES_A_SIETE: 'tres_a_siete', // guiño de ojo
-  AS:           'as',            // lengua apretada lateral
-  JOTA:         'jota',          // mover nariz
-  REINA:        'reina',         // mover boca
-  REY:          'rey',           // cejas arriba
-  DOS_VIRA:     'dos_vira',      // sacar la lengua
-  FAROL:        'farol',         // seña falsa
+  NADA:'nada', TRES_A_SIETE:'tres_a_siete', AS:'as', JOTA:'jota',
+  REINA:'reina', REY:'rey', DOS_VIRA:'dos_vira', FAROL:'farol',
 } as const
 export type Sena = typeof SENAS[keyof typeof SENAS]
 
 export const DESCRIPCION_SENA: Record<Sena, string> = {
-  nada:         'Abre y cierra los labios',
-  tres_a_siete: 'Guiño de ojo',
-  as:           'Lengua apretada en el lateral',
-  jota:         'Mueve la nariz',
-  reina:        'Mueve la boca suavemente',
-  rey:          'Sube las cejas',
-  dos_vira:     'Saca la lengua',
-  farol:        'Farol — seña falsa',
+  nada:'Labios', tres_a_siete:'Guiño', as:'Lengua lateral', jota:'Nariz',
+  reina:'Boca', rey:'Cejas', dos_vira:'Saca lengua', farol:'Farol',
 }
 
 export function calcularSena(mano: Carta[], viraPalo: Palo): Sena {
-  // Prioridad: 2_vira > K > Q > J > A > triunfo_bajo > nada
   if (mano.some(c => c.palo === viraPalo && c.valor === 2)) return SENAS.DOS_VIRA
-  if (mano.some(c => c.valor === 12))  return SENAS.REY
-  if (mano.some(c => c.valor === 11))  return SENAS.REINA
-  if (mano.some(c => c.valor === 10))  return SENAS.JOTA
-  if (mano.some(c => c.valor === 1))   return SENAS.AS
+  if (mano.some(c => c.valor === 12)) return SENAS.REY
+  if (mano.some(c => c.valor === 11)) return SENAS.REINA
+  if (mano.some(c => c.valor === 10)) return SENAS.JOTA
+  if (mano.some(c => c.valor === 1))  return SENAS.AS
   if (mano.some(c => c.palo === viraPalo)) return SENAS.TRES_A_SIETE
   return SENAS.NADA
 }
 
-// ── Acciones ─────────────────────────────────────────────────
-
 export const ACCION = {
-  ENVIO:   'envio',
-  QUIERO:  'quiero',
-  ME_VOY:  'me_voy',
-  FAROL:   'farol',
+  ENVIO:'envio', QUIERO:'quiero', ME_VOY:'me_voy', FAROL:'farol',
 } as const
-export type AccionEspecial = typeof ACCION[keyof typeof ACCION]
-export type Accion = string   // carta.id | AccionEspecial
-
-// ── Estado ───────────────────────────────────────────────────
+export type Accion = string
 
 export interface EstadoJuego {
-  // Jugadores 0,2 = equipo A  |  jugadores 1,3 = equipo B
-  manos:            Carta[][]         // manos[jugador]
-  vira:             Carta
-  turno:            number            // 0-3
-  fase:             1 | 2 | 3
-  miniRonda:        number            // en fase 3: cuántas bazas se han jugado (0-2)
-  cartasMesa:       (Carta | null)[]  // carta jugada por cada jugador en baza actual
-  cartasJugadas:    Carta[]           // historial completo visible
-  puntos:           [number, number]  // [equipoA, equipoB]
-  valorMano:        number            // 1, 3, 6, 9, 12
-  senas:            Sena[]            // senas[jugador]
-  bazasGanadas:     [number, number]  // en fase 3
-  jugadorInicioBaza: number
-  esperandoEnvio:   boolean
-  jugadorPidioEnvio: number
-  terminada:        boolean
-  ganador:          0 | 1 | -1        // equipo ganador
+  manos:                 Carta[][]
+  vira:                  Carta
+  jugadorActual:         number
+  jugadorInicioPartida:  number   // quién empezó la partida — no cambia nunca
+  turno:                 number
+  fase:                  1 | 2 | 3
+  miniRonda:             number
+  cartasMesa:            (Carta | null)[]
+  cartasJugadas:         Carta[]
+  puntos:                [number, number]
+  valorMano:             number
+  senas:                 Sena[]
+  bazasGanadas:          [number, number]
+  jugadorInicioBaza:     number
+  jugadorInicioRonda:    number
+  puntosAcumuladosFase3: number
+  cartaSorteo:           Carta | null
+  palosJugadores:        Palo[]
+  esperandoEnvio:        boolean
+  jugadorPidioEnvio:     number
+  jugadorRespondeEnvio:  number
+  bazaCompleta:          boolean
+  terminada:             boolean
+  ganador:               0 | 1 | -1
 }
 
-// ── Utilidades de estado ──────────────────────────────────────
+export function equipo(j: number): 0 | 1 { return (j % 2) as 0 | 1 }
+export function companero(j: number): number { return (j + 2) % 4 }
 
-export function equipo(jugador: number): 0 | 1 {
-  return (jugador % 2) as 0 | 1
+function es2929(e: EstadoJuego): boolean {
+  return e.puntos[0] === 29 && e.puntos[1] === 29
 }
-
-export function companero(jugador: number): number {
-  return (jugador + 2) % 4
-}
-
-function es2929(estado: EstadoJuego): boolean {
-  return estado.puntos[0] === 29 && estado.puntos[1] === 29
-}
-
-// ── Clonar estado (para MCTS) ─────────────────────────────────
 
 export function clonarEstado(e: EstadoJuego): EstadoJuego {
   return {
-    manos:             e.manos.map(m => [...m]),
-    vira:              { ...e.vira },
-    turno:             e.turno,
-    fase:              e.fase,
-    miniRonda:         e.miniRonda,
-    cartasMesa:        [...e.cartasMesa],
-    cartasJugadas:     [...e.cartasJugadas],
-    puntos:            [e.puntos[0], e.puntos[1]],
-    valorMano:         e.valorMano,
-    senas:             [...e.senas],
-    bazasGanadas:      [e.bazasGanadas[0], e.bazasGanadas[1]],
-    jugadorInicioBaza: e.jugadorInicioBaza,
-    esperandoEnvio:    e.esperandoEnvio,
-    jugadorPidioEnvio: e.jugadorPidioEnvio,
-    terminada:         e.terminada,
-    ganador:           e.ganador,
+    manos:                 e.manos.map(m => [...m]),
+    vira:                  { ...e.vira },
+    jugadorActual:         e.jugadorActual,
+    jugadorInicioPartida:  e.jugadorInicioPartida,
+    turno:                 e.turno,
+    fase:                  e.fase,
+    miniRonda:             e.miniRonda,
+    cartasMesa:            [...e.cartasMesa],
+    cartasJugadas:         [...e.cartasJugadas],
+    puntos:                [e.puntos[0], e.puntos[1]],
+    valorMano:             e.valorMano,
+    senas:                 [...e.senas],
+    bazasGanadas:          [e.bazasGanadas[0], e.bazasGanadas[1]],
+    jugadorInicioBaza:     e.jugadorInicioBaza,
+    jugadorInicioRonda:    e.jugadorInicioRonda,
+    puntosAcumuladosFase3: e.puntosAcumuladosFase3,
+    cartaSorteo:           e.cartaSorteo ? { ...e.cartaSorteo } : null,
+    palosJugadores:        [...e.palosJugadores],
+    esperandoEnvio:        e.esperandoEnvio,
+    jugadorPidioEnvio:     e.jugadorPidioEnvio,
+    jugadorRespondeEnvio:  e.jugadorRespondeEnvio,
+    bazaCompleta:          e.bazaCompleta,
+    terminada:             e.terminada,
+    ganador:               e.ganador,
   }
 }
 
-// ── Creación del estado inicial ───────────────────────────────
+export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
+  if (Math.max(...estado.puntos) >= 21) estado.fase = 3
+  const n = estado.fase
+  let baraja = barajaOpt
+  if (!baraja) baraja = barajar(crearBaraja().filter(c => c.id !== estado.vira.id))
+  for (let j = 0; j < 4; j++)
+    estado.manos[j] = baraja.splice(baraja.length - n, n)
+  estado.cartasMesa            = [null, null, null, null]
+  estado.bazasGanadas          = [0, 0]
+  estado.miniRonda             = 0
+  estado.puntosAcumuladosFase3 = 0
+  estado.bazaCompleta          = false
+  estado.esperandoEnvio        = false
+  estado.jugadorPidioEnvio     = -1
+  estado.jugadorRespondeEnvio  = -1
+  estado.valorMano             = 1
+}
+
+function calcularSenasIA(estado: EstadoJuego): void {
+  for (let j = 1; j < 4; j++)
+    estado.senas[j] = calcularSena(estado.manos[j], estado.vira.palo)
+}
 
 export function crearEstadoInicial(): EstadoJuego {
   const baraja = barajar(crearBaraja())
   const vira   = baraja.pop()!
+
+  // Palos asignados aleatoriamente: palosAleatorios[j] = palo del jugador j
+  const palosAleatorios = barajar([...PALOS]) as Palo[]
+
+  // Carta de sorteo
+  const cartaSorteo = baraja.pop()!
+  const paloSorteo  = cartaSorteo.palo
+
+  // Jugador al que le corresponde ese palo
+  const jugadorConPalo = palosAleatorios.indexOf(paloSorteo)
+
+  // Mesa visual: J0=abajo, J1=izquierda, J2=arriba, J3=derecha
+  // Sentido horario visto desde arriba: J0 → J3 → J2 → J1 → J0
+  // El de la derecha de cada jugador:
+  //   derecha de J0 = J3
+  //   derecha de J1 = J0
+  //   derecha de J2 = J1
+  //   derecha de J3 = J2
+  const derechaDeJ = [3, 0, 1, 2]
+  const jugadorInicio = derechaDeJ[jugadorConPalo]
+
   const estado: EstadoJuego = {
-    manos:             [[], [], [], []],
+    manos:                 [[], [], [], []],
     vira,
-    turno:             0,
-    fase:              1,
-    miniRonda:         0,
-    cartasMesa:        [null, null, null, null],
-    cartasJugadas:     [],
-    puntos:            [0, 0],
-    valorMano:         1,
-    senas:             ['nada', 'nada', 'nada', 'nada'],
-    bazasGanadas:      [0, 0],
-    jugadorInicioBaza: 0,
-    esperandoEnvio:    false,
-    jugadorPidioEnvio: -1,
-    terminada:         false,
-    ganador:           -1,
+    jugadorActual:         jugadorInicio,
+    jugadorInicioPartida:  jugadorInicio,   // guardado fijo para la UI del sorteo
+    turno:                 jugadorInicio,
+    fase:                  1,
+    miniRonda:             0,
+    cartasMesa:            [null, null, null, null],
+    cartasJugadas:         [],
+    puntos:                [0, 0],
+    valorMano:             1,
+    senas:                 ['nada', 'nada', 'nada', 'nada'],
+    bazasGanadas:          [0, 0],
+    jugadorInicioBaza:     jugadorInicio,
+    jugadorInicioRonda:    jugadorInicio,
+    esperandoEnvio:        false,
+    jugadorPidioEnvio:     -1,
+    jugadorRespondeEnvio:  -1,
+    bazaCompleta:          false,
+    puntosAcumuladosFase3: 0,
+    cartaSorteo,
+    palosJugadores:        palosAleatorios,
+    terminada:             false,
+    ganador:               -1,
   }
+
   repartirFase(estado, baraja)
   calcularSenasIA(estado)
+
+  // Restaurar tras repartirFase por si acaso
+  estado.jugadorActual      = jugadorInicio
+  estado.jugadorInicioBaza  = jugadorInicio
+  estado.jugadorInicioRonda = jugadorInicio
+  estado.turno              = jugadorInicio
+
   return estado
 }
 
-// ── Repartir cartas ───────────────────────────────────────────
-
-export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
-  // A partir de 21 puntos siempre fase 3
-  if (Math.max(...estado.puntos) >= 21) {
-    estado.fase = 3
-  }
-  const n = estado.fase
-
-  let baraja = barajaOpt
-  if (!baraja) {
-    baraja = barajar(crearBaraja().filter(c => c.id !== estado.vira.id))
-  }
-
-  for (let j = 0; j < 4; j++) {
-    estado.manos[j] = baraja.splice(baraja.length - n, n)
-  }
-  estado.cartasMesa   = [null, null, null, null]
-  estado.bazasGanadas = [0, 0]
-  estado.miniRonda    = 0
-}
-
-function calcularSenasIA(estado: EstadoJuego): void {
-  // Jugadores 1, 2, 3 son IA — calculan su seña automáticamente
-  for (let j = 1; j < 4; j++) {
-    estado.senas[j] = calcularSena(estado.manos[j], estado.vira.palo)
-  }
-}
-
-// ── Acciones legales ──────────────────────────────────────────
-
 export function accionesLegales(estado: EstadoJuego, jugador: number): Accion[] {
+  if (estado.terminada) return []
+  if (jugador !== estado.jugadorActual) return []
+
   const legales: Accion[] = []
 
   if (estado.esperandoEnvio) {
-    const eqPidio = equipo(estado.jugadorPidioEnvio)
-    if (equipo(jugador) !== eqPidio) {
-      legales.push(ACCION.QUIERO)
-      legales.push(ACCION.ME_VOY)
-      if (!es2929(estado)) legales.push(ACCION.ENVIO)
-    }
+    legales.push(ACCION.QUIERO)
+    legales.push(ACCION.ME_VOY)
+    if (!es2929(estado)) legales.push(ACCION.ENVIO)
     return legales
   }
 
-  if (estado.turno !== jugador) return []
-
-  // Puede jugar cualquier carta de su mano
-  for (const carta of estado.manos[jugador]) {
+  for (const carta of estado.manos[jugador])
     legales.push(carta.id)
-  }
 
-  // Puede pedir envío (si no es 29-29)
-  if (!es2929(estado)) {
+  if (!es2929(estado) && estado.jugadorPidioEnvio !== jugador)
     legales.push(ACCION.ENVIO)
-  }
 
-// Puede hacer farol si no lleva vira Y tiene más de una carta
-  const tieneVira = estado.manos[jugador].some(c => c.palo === estado.vira.palo)
-  if (!tieneVira && estado.manos[jugador].length > 1) {
-    legales.push(ACCION.FAROL)
+  const mesaVacia = estado.cartasMesa.every(c => c === null)
+  if (mesaVacia && estado.manos[jugador].length > 1) {
+    const tieneVira = estado.manos[jugador].some(c => c.palo === estado.vira.palo)
+    if (!tieneVira) legales.push(ACCION.FAROL)
   }
 
   return legales
 }
 
-// ── Aplicar acción ────────────────────────────────────────────
-
-export interface ResultadoAccion {
-  terminada:   boolean
-  ganador:     0 | 1 | -1
-  puntos:      [number, number]
-  bazaGanada?: { jugador: number; equipo: 0 | 1 }
-  nuevaFase?:  boolean
+function siguienteEnBaza(estado: EstadoJuego, desde: number): number {
+  // Sentido de juego: J0→J3→J2→J1→J0
+  const SIG: Record<number, number> = { 0: 3, 3: 2, 2: 1, 1: 0 }
+  let actual = desde
+  for (let i = 0; i < 4; i++) {
+    actual = SIG[actual]
+    if (estado.cartasMesa[actual] === null) return actual
+  }
+  return desde
 }
 
-export function aplicarAccion(
-  estado: EstadoJuego,
-  jugador: number,
-  accion: Accion,
-): ResultadoAccion {
+export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Accion): void {
+  if (jugador !== estado.jugadorActual) return
+  if (estado.terminada) return
 
-  // ── Respuesta a envío pendiente ──
   if (estado.esperandoEnvio) {
     if (accion === ACCION.QUIERO) {
       estado.esperandoEnvio = false
+      estado.jugadorActual  = estado.jugadorPidioEnvio
     } else if (accion === ACCION.ME_VOY) {
-      const eqGanador = equipo(estado.jugadorPidioEnvio)
-      estado.puntos[eqGanador] += estado.valorMano
+      estado.puntos[equipo(estado.jugadorPidioEnvio)] += 1
       estado.esperandoEnvio = false
-      _siguienteFaseOFin(estado)
+      _comprobarFin(estado)
+      if (!estado.terminada) _nuevaFase(estado)
     } else if (accion === ACCION.ENVIO) {
-      estado.valorMano = Math.min(estado.valorMano + 3, 12)
-      estado.jugadorPidioEnvio = jugador
-      // sigue esperando respuesta del otro equipo
+      estado.valorMano            = Math.min(estado.valorMano + 3, 12)
+      estado.jugadorPidioEnvio    = jugador
+      const eqPidio               = equipo(jugador)
+      const responde              = [0,1,2,3].find(j => equipo(j) !== eqPidio)!
+      estado.jugadorRespondeEnvio = responde
+      estado.jugadorActual        = responde
     }
-    return _resultado(estado)
+    return
   }
 
-  // ── Envío ──
   if (accion === ACCION.ENVIO) {
     if (es2929(estado)) {
-      // Pedir envío en 29-29 → el rival gana punto
-      const eqRival = (1 - equipo(jugador)) as 0 | 1
-      estado.puntos[eqRival] += 1
+      estado.puntos[(1 - equipo(jugador)) as 0|1] += 1
       _comprobarFin(estado)
-    } else {
-      estado.valorMano = estado.valorMano === 1
-        ? 3
-        : Math.min(estado.valorMano + 3, 12)
-      estado.jugadorPidioEnvio = jugador
-      estado.esperandoEnvio = true
+      return
     }
-    return _resultado(estado)
+    estado.valorMano            = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 12)
+    estado.jugadorPidioEnvio    = jugador
+    estado.esperandoEnvio       = true
+    const eqPidio               = equipo(jugador)
+    const responde              = [0,1,2,3].find(j => equipo(j) !== eqPidio)!
+    estado.jugadorRespondeEnvio = responde
+    estado.jugadorActual        = responde
+    return
   }
 
-  // ── Farol ──
   if (accion === ACCION.FAROL) {
     estado.senas[jugador] = SENAS.FAROL
-    return _resultado(estado)
+    return
   }
 
-  // ── Jugar carta ──
   const carta = estado.manos[jugador].find(c => c.id === accion)
-  if (!carta) return _resultado(estado)   // acción ilegal — ignorar
+  if (!carta) return
 
-  estado.manos[jugador] = estado.manos[jugador].filter(c => c.id !== accion)
+  estado.manos[jugador]      = estado.manos[jugador].filter(c => c.id !== accion)
   estado.cartasMesa[jugador] = carta
   estado.cartasJugadas.push(carta)
 
-  // ¿Han jugado todos?
   const todosJugaron = estado.cartasMesa.every(c => c !== null)
   if (todosJugaron) {
     _resolverBaza(estado)
   } else {
-    // Siguiente jugador en sentido horario
-    estado.turno = (jugador + 1) % 4
+    estado.jugadorActual = siguienteEnBaza(estado, jugador)
+    estado.turno         = estado.jugadorActual
   }
-
-  return _resultado(estado)
 }
 
 function _resolverBaza(estado: EstadoJuego): void {
-  const viraPalo = estado.vira.palo
+  const viraPalo      = estado.vira.palo
+  const primeraIdx    = estado.cartasMesa.findIndex(c => c !== null)
+  const subviraPalo   = estado.cartasMesa[primeraIdx]!.palo
+  const hayVira       = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
+  const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
 
-  // Jugador con la carta más fuerte
-  let ganador = 0
-  let maxFuerza = -1
+  let ganador = 0, maxF = -1
   for (let j = 0; j < 4; j++) {
-    const f = fuerzaCarta(estado.cartasMesa[j]!, viraPalo)
-    if (f > maxFuerza) { maxFuerza = f; ganador = j }
+    const carta = estado.cartasMesa[j]
+    if (!carta) continue
+    let f: number
+    if (hayVira) {
+      f = fuerzaCarta(carta, viraPalo)
+    } else {
+      f = carta.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(carta.valor)
+    }
+    if (f > maxF) { maxF = f; ganador = j }
   }
 
   const eqGanador = equipo(ganador)
 
+  estado.bazaCompleta      = true
+  estado.jugadorActual     = -1
+  estado.jugadorInicioBaza = ganador
+
   if (estado.fase === 3) {
     estado.bazasGanadas[eqGanador]++
     estado.miniRonda++
-    estado.jugadorInicioBaza = ganador
-
-    const alguienGanosDos = Math.max(...estado.bazasGanadas) >= 2
-    const todasJugadas    = estado.miniRonda === 3
-
-    if (alguienGanosDos || todasJugadas) {
-      const eqFase: 0 | 1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
-      estado.puntos[eqFase] += estado.valorMano
-      _comprobarFin(estado)
-      if (!estado.terminada) _siguienteFase(estado)
-    } else {
-      estado.cartasMesa = [null, null, null, null]
-      estado.turno      = ganador
-    }
-  } else {
-    // Fase 1 o 2: quien gana la baza, gana el punto
-    estado.puntos[eqGanador] += estado.valorMano
-    _comprobarFin(estado)
-    if (!estado.terminada) _siguienteFase(estado)
-  }
-
-  if (!estado.terminada) {
-    estado.cartasMesa = [null, null, null, null]
-    estado.turno      = ganador
-    estado.valorMano  = 1
   }
 }
 
-function _siguienteFase(estado: EstadoJuego): void {
+function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
+  const faseAnterior   = estado.fase
+  const inicioRondaAnt = estado.jugadorInicioRonda
+
   const maxPts = Math.max(...estado.puntos)
-  if (maxPts >= 21) {
-    estado.fase = 3
-  } else {
-    estado.fase = ((estado.fase % 3) + 1) as 1 | 2 | 3
-  }
-  repartirFase(estado)
-  calcularSenasIA(estado)
-}
+  if (maxPts >= 21) estado.fase = 3
+  else estado.fase = ((estado.fase % 3) + 1) as 1|2|3
 
-function _siguienteFaseOFin(estado: EstadoJuego): void {
-  _comprobarFin(estado)
-  if (!estado.terminada) _siguienteFase(estado)
+  if (estado.fase === 1) {
+    const nuevoInicio = (inicioRondaAnt + 1) % 4
+    const baraja = barajar(crearBaraja())
+    estado.vira = baraja[0]
+    repartirFase(estado)
+    calcularSenasIA(estado)
+    estado.jugadorInicioRonda = nuevoInicio
+    estado.jugadorActual      = nuevoInicio
+    estado.jugadorInicioBaza  = nuevoInicio
+    estado.turno              = nuevoInicio
+  } else if (estado.fase === 3 && faseAnterior !== 3) {
+    repartirFase(estado)
+    calcularSenasIA(estado)
+    estado.jugadorInicioRonda = inicioRondaAnt
+    estado.jugadorActual      = inicioRondaAnt
+    estado.jugadorInicioBaza  = inicioRondaAnt
+    estado.turno              = inicioRondaAnt
+  } else {
+    repartirFase(estado)
+    calcularSenasIA(estado)
+    estado.jugadorActual     = inicioRondaAnt
+    estado.jugadorInicioBaza = inicioRondaAnt
+    estado.turno             = inicioRondaAnt
+  }
 }
 
 function _comprobarFin(estado: EstadoJuego): void {
   for (let eq = 0; eq < 2; eq++) {
     if (estado.puntos[eq] >= 30) {
       estado.terminada = true
-      estado.ganador   = eq as 0 | 1
-      return
+      estado.ganador   = eq as 0|1
     }
   }
 }
 
-function _resultado(estado: EstadoJuego): ResultadoAccion {
-  return {
-    terminada: estado.terminada,
-    ganador:   estado.ganador,
-    puntos:    [estado.puntos[0], estado.puntos[1]],
+export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
+  estado.bazaCompleta = false
+
+  const viraPalo      = estado.vira.palo
+  const primeraIdx    = estado.cartasMesa.findIndex(c => c !== null)
+  const subviraPalo   = estado.cartasMesa[primeraIdx]!.palo
+  const hayVira       = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
+  const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
+
+  let ganador = 0, maxF = -1
+  for (let j = 0; j < 4; j++) {
+    const carta = estado.cartasMesa[j]
+    if (!carta) continue
+    let f: number
+    if (hayVira) {
+      f = fuerzaCarta(carta, viraPalo)
+    } else {
+      f = carta.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(carta.valor)
+    }
+    if (f > maxF) { maxF = f; ganador = j }
+  }
+
+  const eqGanador = equipo(ganador)
+
+  if (estado.fase === 3) {
+    const alguienGanoDos = Math.max(...estado.bazasGanadas) >= 2
+    const todasJugadas   = estado.miniRonda >= 3
+    if (alguienGanoDos || todasJugadas) {
+      const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
+      const totalPuntos = estado.puntosAcumuladosFase3 + estado.valorMano
+      estado.puntos[eqFase] += totalPuntos
+      _comprobarFin(estado)
+      if (!estado.terminada) _nuevaFase(estado, ganador)
+    } else {
+      estado.puntosAcumuladosFase3 += estado.valorMano
+      estado.cartasMesa        = [null, null, null, null]
+      estado.jugadorInicioBaza = ganador
+      estado.jugadorActual     = ganador
+      estado.turno             = ganador
+      estado.valorMano         = 1
+      estado.jugadorPidioEnvio = -1
+      estado.esperandoEnvio    = false
+    }
+  } else {
+    estado.puntos[eqGanador] += estado.valorMano
+    _comprobarFin(estado)
+    if (!estado.terminada) _nuevaFase(estado, ganador)
   }
 }
 
-// ── Heurística rápida (para MCTS rollouts) ────────────────────
-
 export function evaluarMano(mano: Carta[], viraPalo: Palo): number {
-  return mano.reduce((sum, c) => sum + fuerzaCarta(c, viraPalo), 0)
+  return mano.reduce((s, c) => s + fuerzaCarta(c, viraPalo), 0)
 }
