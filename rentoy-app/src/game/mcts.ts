@@ -20,6 +20,8 @@ export const DIFICULTAD: Record<string, ConfigMCTS> = {
   experto: { simulaciones: 1000,mundos: 35, C: 1.4, profundidad: 70, tiempoLimiteMs: 3000 },
 }
 
+// ── Conocimiento del juego ────────────────────────────────────
+
 function cartasVistas(estado: EstadoJuego): Set<string> {
   const vistas = new Set<string>()
   estado.cartasJugadas.forEach(c => vistas.add(c.id))
@@ -30,13 +32,12 @@ function cartasVistas(estado: EstadoJuego): Set<string> {
 }
 
 function maxFuerzaDesconocida(estado: EstadoJuego, jugador: number, viraPalo: Palo): number {
-  const vistas  = cartasVistas(estado)
+  const vistas   = cartasVistas(estado)
   const misManos = new Set(estado.manos[jugador].map(c => c.id))
   let max = 0
-  for (const c of crearBaraja()) {
+  for (const c of crearBaraja())
     if (!vistas.has(c.id) && !misManos.has(c.id))
       max = Math.max(max, fuerzaCarta(c, viraPalo))
-  }
   return max
 }
 
@@ -57,6 +58,8 @@ function hayArrastre(estado: EstadoJuego): boolean {
   return primera ? primera.palo === estado.vira.palo : false
 }
 
+// ── Análisis de situación ─────────────────────────────────────
+
 interface Situacion {
   viraPalo: Palo; mano: Carta[]
   tengoVira: boolean; tengoViraAlta: boolean; virasEnMano: Carta[]
@@ -66,6 +69,13 @@ interface Situacion {
   cartaGanadoraMesa: Carta | null; equipoGanaMesa: 0 | 1 | -1
   eqJug: 0 | 1; puntosNos: number; puntosEllos: number
   ventaja: number; hayArrastre: boolean; bazasGanadas: [number, number]
+  // Fase 3: contexto de mini-bazas
+  misBazas:       number   // mini-bazas ganadas por mi equipo
+  rivalBazas:     number   // mini-bazas ganadas por rivales
+  miniRonda:      number   // cuántas mini-bazas se han jugado (0,1,2)
+  necesitoBaza:   boolean  // si necesito ganar la siguiente para seguir vivo
+  yaTengoVictoria:boolean  // si ya gané 2 mini-bazas (no debería pasar aquí)
+  puedePerder:    boolean  // si el rival ya tiene 1 baza y yo 0 → situación crítica
 }
 
 function analizar(estado: EstadoJuego, jugador: number): Situacion {
@@ -98,6 +108,10 @@ function analizar(estado: EstadoJuego, jugador: number): Situacion {
     if (f > mejorFuerzaMesa) { mejorFuerzaMesa = f; cartaGanadoraMesa = c; equipoGanaMesa = equipo(j) }
   }
 
+  const misBazas    = estado.bazasGanadas[eqJug]
+  const rivalBazas  = estado.bazasGanadas[1 - eqJug]
+  const miniRonda   = estado.miniRonda
+
   return {
     viraPalo, mano, tengoVira, tengoViraAlta, virasEnMano,
     virasDescPorRival, fuerzaMano, companeroFuerte, rivalesFuertes,
@@ -108,50 +122,57 @@ function analizar(estado: EstadoJuego, jugador: number): Situacion {
     ventaja:     estado.puntos[eqJug] - estado.puntos[1 - eqJug],
     hayArrastre: hayArrastre(estado),
     bazasGanadas: estado.bazasGanadas,
+    misBazas,
+    rivalBazas,
+    miniRonda,
+    necesitoBaza:    estado.fase === 3 && rivalBazas === 1 && misBazas === 0,
+    yaTengoVictoria: estado.fase === 3 && misBazas >= 2,
+    puedePerder:     estado.fase === 3 && rivalBazas > misBazas,
   }
 }
 
-// ── Decisión de envío — solo basada en vira ───────────────────
+// ── Decisión de envío ─────────────────────────────────────────
 
 function calcularFuerzaEnvio(estado: EstadoJuego, jugador: number): number {
   const s   = analizar(estado, jugador)
   const { viraPalo, mano } = s
   let pts = 0
 
-  // Sin vira → casi nunca tiene sentido enviar o aceptar
-  if (!s.tengoVira) pts -= 30
+  // Sin vira → nunca tiene sentido
+  if (!s.tengoVira) pts -= 35
 
-  // Fuerza de las cartas de VIRA únicamente (lo que realmente gana bazas)
+  // Fuerza de vira únicamente
   const fuerzaVira = s.virasEnMano.reduce((sum, c) => sum + fuerzaCarta(c, viraPalo), 0)
   pts += Math.min(fuerzaVira * 0.8, 50)
 
-  // 2 de vira (carta más fuerte del juego)
-  if (mano.some(c => c.palo === viraPalo && c.valor === 2))  pts += 40
-  // K o Q de vira
+  if (mano.some(c => c.palo === viraPalo && c.valor === 2))               pts += 40
   if (mano.some(c => c.palo === viraPalo && (c.valor === 12 || c.valor === 11))) pts += 20
 
-  // Cartas altas de no-vira aportan muy poco
-  const fuerzaNoVira = mano
-    .filter(c => c.palo !== viraPalo)
+  const fuerzaNoVira = mano.filter(c => c.palo !== viraPalo)
     .reduce((sum, c) => sum + fuerzaCarta(c, viraPalo), 0)
   pts += Math.min(fuerzaNoVira * 0.08, 8)
 
-  // Compañero señó fuerte → entre los dos podemos ganar
-  if (s.companeroFuerte) pts += 15
-
-  // Pocas viras quedan → las mías valen más
+  if (s.companeroFuerte)       pts += 15
   if (s.virasDescPorRival <= 2) pts += 12
   if (s.virasDescPorRival === 0) pts += 15
 
-  // Ganando mini-bazas en fase 3
-  if (estado.fase === 3 && s.bazasGanadas[s.eqJug] > s.bazasGanadas[1 - s.eqJug])
-    pts += 15
+  // ── FASE 3: lógica especial de mejor-de-3 ──
+  if (estado.fase === 3) {
+    // Si ya voy ganando en mini-bazas → más agresivo
+    if (s.misBazas > s.rivalBazas)    pts += 20
+    // Si voy empatado → neutro
+    // Si voy perdiendo → muy cauteloso con el envío
+    if (s.puedePerder)                 pts -= 25
+    // Si el rival ya tiene 1 baza y yo 0 → nunca enviar a menos que tenga mano brutal
+    if (s.necesitoBaza)                pts -= 30
+    // Si es la primera mini-baza → más cauto (3 por jugar)
+    if (s.miniRonda === 0)             pts -= 10
+    // Si es la última mini-baza → más agresivo si voy ganando
+    if (s.miniRonda === 2 && s.misBazas === 1) pts += 25
+  }
 
-  // Penalizaciones
   if (s.rivalesFuertes) pts -= 20
   if (s.ventaja >= 6)   pts -= 15
-
-  // Urgencia: ellos cerca de ganar
   if (s.puntosEllos >= 25) pts += 15
   if (s.puntosEllos >= 27) pts += 10
 
@@ -180,18 +201,75 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
   if (candidatas.length === 0) return cartasLeg[0]
   if (candidatas.length === 1) return candidatas[0].id
 
-  // ── PRIMERO EN JUGAR ──
+  // ── FASE 3: Lógica especial de mejor-de-3 ──
+  if (estado.fase === 3) {
+    // Si ya ganamos 2 mini-bazas, no debería llegar aquí pero por si acaso
+    if (s.yaTengoVictoria) return _cartaMasDebil(candidatas, viraPalo)
+
+    // Si voy ganando 1-0 → jugar con cautela, guardar vira para la siguiente
+    // Si voy perdiendo 0-1 → necesito ganar esta baza sí o sí → ser agresivo
+    // Si empate 0-0 o 1-1 → juego normal
+
+    if (s.necesitoBaza) {
+      // Situación crítica: rival tiene 1 baza, yo 0. Debo ganar esta.
+      // Usar la carta más fuerte disponible
+      if (!hayMesa) {
+        // Si tengo vira, tirarla para asegurar
+        if (s.tengoVira) {
+          const mejorVira = s.virasEnMano
+            .filter(c => candidatas.some(x => x.id === c.id))
+            .sort((a,b) => fuerzaCarta(b,viraPalo) - fuerzaCarta(a,viraPalo))[0]
+          if (mejorVira) return mejorVira.id
+        }
+        return _cartaMasFuerte(candidatas, viraPalo)
+      }
+      // Con cartas en mesa: ganar con lo mínimo posible si puedo
+      const fActual  = s.mejorFuerzaMesa
+      const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > fActual)
+      if (queGanan.length > 0)
+        return queGanan.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+      // No puedo ganar → tirar la más débil
+      const sinVira = candidatas.filter(c => c.palo !== viraPalo)
+      return sinVira.length > 0 ? _cartaMasDebil(sinVira, viraPalo) : _cartaMasDebil(candidatas, viraPalo)
+    }
+
+    if (s.misBazas === 1 && s.rivalBazas === 0) {
+      // Voy ganando 1-0 → preservar vira para la siguiente mini-baza
+      // Solo usar vira si es absolutamente necesario para ganar esta
+      if (!hayMesa) {
+        // Si el compañero señó fuerte → tirar carta débil, guardar vira
+        if (s.companeroFuerte) {
+          const sinVira = candidatas.filter(c => c.palo !== viraPalo)
+          if (sinVira.length > 0) return _cartaMasDebil(sinVira, viraPalo)
+        }
+        // Carta ganadora segura sin vira → usarla
+        const ganadoras = candidatas.filter(c =>
+          esGanadoraSegura(c, viraPalo, estado, jugador) && c.palo !== viraPalo
+        )
+        if (ganadoras.length > 0)
+          return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+        // Si tengo carta ganadora segura de vira → solo usarla si no tengo otra opción
+        const ganadoarasVira = candidatas.filter(c => esGanadoraSegura(c, viraPalo, estado, jugador))
+        if (ganadoarasVira.length > 0 && candidatas.filter(c => c.palo !== viraPalo).length === 0)
+          return ganadoarasVira.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+        // Guardar vira → tirar sin vira
+        const sinVira = candidatas.filter(c => c.palo !== viraPalo)
+        if (sinVira.length > 0) return _cartaMasFuerte(sinVira, viraPalo)
+        return _cartaMasFuerte(candidatas, viraPalo)
+      }
+    }
+  }
+
+  // ── LÓGICA GENERAL (fases 1/2 y fase 3 normal) ──
+
   if (!hayMesa) {
-    // Carta ganadora segura → jugar la más débil de ellas (economía)
     const ganadoras = candidatas.filter(c => esGanadoraSegura(c, viraPalo, estado, jugador))
     if (ganadoras.length > 0)
       return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
 
-    // Compañero señó fuerte → tirar carta media, guardar las buenas
     if (s.companeroFuerte && !s.tengoViraAlta)
       return _cartaMedia(candidatas, viraPalo)
 
-    // Tengo todas las viras restantes → arrastrar con la más alta
     if (s.tengoVira && s.virasDescPorRival === 0) {
       const mejorVira = s.virasEnMano
         .filter(c => candidatas.some(x => x.id === c.id))
@@ -199,7 +277,6 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
       if (mejorVira) return mejorVira.id
     }
 
-    // Tengo vira → tirar la más fuerte
     if (s.tengoVira) {
       const mejorVira = s.virasEnMano
         .filter(c => candidatas.some(x => x.id === c.id))
@@ -207,35 +284,26 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
       if (mejorVira) return mejorVira.id
     }
 
-    // Sin vira: tirar la más fuerte de no-vira
     return _cartaMasFuerte(candidatas, viraPalo)
   }
 
-  // ── HAY CARTAS EN MESA ──
-
   if (s.mesaGanaEquipo) {
-    // Mi equipo ya gana → tirar la más débil, sin gastar vira innecesariamente
-    // Excepción: si la carta ganadora es muy débil (f < 50) y puedo asegurarla con vira
     if (s.mejorFuerzaMesa < 50 && s.tengoVira) {
       const viraMasDebil = s.virasEnMano
         .filter(c => candidatas.some(x => x.id === c.id))
         .sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0]
       if (viraMasDebil) return viraMasDebil.id
     }
-    // Tirar la más débil que no sea vira
     const sinVira = candidatas.filter(c => c.palo !== viraPalo)
     if (sinVira.length > 0) return _cartaMasDebil(sinVira, viraPalo)
     return _cartaMasDebil(candidatas, viraPalo)
   }
 
-  // Mi equipo NO va ganando → intentar ganar con la mínima carta necesaria
   const fActual  = s.mejorFuerzaMesa
   const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > fActual)
-
   if (queGanan.length > 0)
     return queGanan.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
 
-  // No puedo ganar → tirar la más débil sin vira
   const sinVira = candidatas.filter(c => c.palo !== viraPalo)
   if (sinVira.length > 0) return _cartaMasDebil(sinVira, viraPalo)
   return _cartaMasDebil(candidatas, viraPalo)
@@ -248,7 +316,6 @@ function politicaHeuristica(estado: EstadoJuego, jugador: number, legales: Accio
 
   if (estado.esperandoEnvio) {
     if (deberiaAceptar(estado, jugador)) {
-      // Subir envío si mano muy fuerte
       if (legales.includes(ACCION.ENVIO) && calcularFuerzaEnvio(estado, jugador) > 80)
         return ACCION.ENVIO
       return ACCION.QUIERO
@@ -351,7 +418,7 @@ function mctsEnMundo(estadoInicial: EstadoJuego, jugadorIA: number, config: Conf
   if (accIniciales.length === 0) return new Map()
   if (accIniciales.length === 1) return new Map([[accIniciales[0], 1]])
 
-  const raiz = new NodoMCTS(null, null, accIniciales)
+  const raiz  = new NodoMCTS(null, null, accIniciales)
   const inicio = Date.now()
 
   for (let i = 0; i < config.simulaciones; i++) {
