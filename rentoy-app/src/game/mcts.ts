@@ -58,24 +58,46 @@ function hayArrastre(estado: EstadoJuego): boolean {
   return primera ? primera.palo === estado.vira.palo : false
 }
 
+function fuerzaCartaGanadoraMesa(estado: EstadoJuego): { fuerza: number, equipoGana: 0|1|-1 } {
+  const viraPalo = estado.vira.palo
+  let maxF = -1; let equipoGana: 0|1|-1 = -1
+  for (let j = 0; j < 4; j++) {
+    const c = estado.cartasMesa[j]; if (!c) continue
+    const f = fuerzaCarta(c, viraPalo)
+    if (f > maxF) { maxF = f; equipoGana = equipo(j) }
+  }
+  return { fuerza: maxF, equipoGana }
+}
+
+function mesaEsImbatible(estado: EstadoJuego, jugador: number): boolean {
+  const viraPalo = estado.vira.palo
+  const { fuerza } = fuerzaCartaGanadoraMesa(estado)
+  if (fuerza < 0) return false
+  const miMejor = Math.max(...estado.manos[jugador].map(c => fuerzaCarta(c, viraPalo)), -1)
+  return fuerza >= miMejor
+}
+
+function equipoRivalGanaMesa(estado: EstadoJuego, jugador: number): boolean {
+  const { equipoGana } = fuerzaCartaGanadoraMesa(estado)
+  return equipoGana !== -1 && equipoGana !== equipo(jugador)
+}
+
 // ── Análisis de situación ─────────────────────────────────────
 
 interface Situacion {
   viraPalo: Palo; mano: Carta[]
   tengoVira: boolean; tengoViraAlta: boolean; virasEnMano: Carta[]
-  virasDescPorRival: number; fuerzaMano: number
+  tengo2Vira: boolean
+  virasDescPorRival: number; fuerzaMano: number; fuerzaVira: number
   companeroFuerte: boolean; rivalesFuertes: boolean
   mesaGanaEquipo: boolean; mejorFuerzaMesa: number
   cartaGanadoraMesa: Carta | null; equipoGanaMesa: 0 | 1 | -1
+  mesaRival: boolean
   eqJug: 0 | 1; puntosNos: number; puntosEllos: number
   ventaja: number; hayArrastre: boolean; bazasGanadas: [number, number]
-  // Fase 3: contexto de mini-bazas
-  misBazas:       number   // mini-bazas ganadas por mi equipo
-  rivalBazas:     number   // mini-bazas ganadas por rivales
-  miniRonda:      number   // cuántas mini-bazas se han jugado (0,1,2)
-  necesitoBaza:   boolean  // si necesito ganar la siguiente para seguir vivo
-  yaTengoVictoria:boolean  // si ya gané 2 mini-bazas (no debería pasar aquí)
-  puedePerder:    boolean  // si el rival ya tiene 1 baza y yo 0 → situación crítica
+  misBazas: number; rivalBazas: number; miniRonda: number
+  necesitoBaza: boolean; yaTengoVictoria: boolean; puedePerder: boolean
+  tengoImbatible: boolean  // tengo carta que nadie puede superar
 }
 
 function analizar(estado: EstadoJuego, jugador: number): Situacion {
@@ -86,13 +108,14 @@ function analizar(estado: EstadoJuego, jugador: number): Situacion {
 
   const virasEnMano   = mano.filter(c => c.palo === viraPalo)
   const tengoVira     = virasEnMano.length > 0
-  const tengoViraAlta = mano.some(c =>
-    (c.palo === viraPalo && c.valor === 2) ||
-    (c.palo === viraPalo && c.valor === 12)
-  )
+  const tengo2Vira    = mano.some(c => c.palo === viraPalo && c.valor === 2)
+  const tengoViraAlta = tengo2Vira || mano.some(c => c.palo === viraPalo && c.valor === 12)
+  const fuerzaVira    = virasEnMano.reduce((s, c) => s + fuerzaCarta(c, viraPalo), 0)
+  const fuerzaMano    = evaluarMano(mano, viraPalo)
 
-  const virasDescPorRival = virasDesconocidas(estado, jugador)
-  const fuerzaMano        = evaluarMano(mano, viraPalo)
+  // Carta imbatible: ninguna carta no vista puede superarla
+  const maxDesc = maxFuerzaDesconocida(estado, jugador, viraPalo)
+  const tengoImbatible = mano.some(c => fuerzaCarta(c, viraPalo) > maxDesc)
 
   const cartasFuertes   = [SENAS.DOS_VIRA, SENAS.REY, SENAS.REINA, SENAS.JOTA, SENAS.AS]
   const companeroFuerte = cartasFuertes.includes(estado.senas[companeroIdx] as any)
@@ -108,23 +131,25 @@ function analizar(estado: EstadoJuego, jugador: number): Situacion {
     if (f > mejorFuerzaMesa) { mejorFuerzaMesa = f; cartaGanadoraMesa = c; equipoGanaMesa = equipo(j) }
   }
 
-  const misBazas    = estado.bazasGanadas[eqJug]
-  const rivalBazas  = estado.bazasGanadas[1 - eqJug]
-  const miniRonda   = estado.miniRonda
+  const mesaGanaEquipo = equipoGanaMesa === eqJug
+  const mesaRival      = equipoGanaMesa !== -1 && equipoGanaMesa !== eqJug
+  const misBazas       = estado.bazasGanadas[eqJug]
+  const rivalBazas     = estado.bazasGanadas[1 - eqJug]
 
   return {
     viraPalo, mano, tengoVira, tengoViraAlta, virasEnMano,
-    virasDescPorRival, fuerzaMano, companeroFuerte, rivalesFuertes,
-    mesaGanaEquipo: equipoGanaMesa === eqJug,
+    tengo2Vira, fuerzaVira, fuerzaMano, tengoImbatible,
+    virasDescPorRival: virasDesconocidas(estado, jugador),
+    companeroFuerte, rivalesFuertes,
+    mesaGanaEquipo, mesaRival,
     mejorFuerzaMesa, cartaGanadoraMesa, equipoGanaMesa, eqJug,
     puntosNos:   estado.puntos[eqJug],
     puntosEllos: estado.puntos[1 - eqJug],
     ventaja:     estado.puntos[eqJug] - estado.puntos[1 - eqJug],
     hayArrastre: hayArrastre(estado),
     bazasGanadas: estado.bazasGanadas,
-    misBazas,
-    rivalBazas,
-    miniRonda,
+    misBazas, rivalBazas,
+    miniRonda:       estado.miniRonda,
     necesitoBaza:    estado.fase === 3 && rivalBazas === 1 && misBazas === 0,
     yaTengoVictoria: estado.fase === 3 && misBazas >= 2,
     puedePerder:     estado.fase === 3 && rivalBazas > misBazas,
@@ -133,99 +158,95 @@ function analizar(estado: EstadoJuego, jugador: number): Situacion {
 
 // ── Decisión de envío ─────────────────────────────────────────
 
-function calcularFuerzaEnvio(estado: EstadoJuego, jugador: number): number {
-  const s   = analizar(estado, jugador)
+function calcularFuerzaEnvio(estado: EstadoJuego, jugador: number, s: Situacion): number {
   const { viraPalo, mano } = s
+
+  // HARD STOPS
+  if (!s.tengoVira && !s.companeroFuerte) return -999
+  if (s.mesaRival && mesaEsImbatible(estado, jugador)) return -999
+  if (s.mesaRival && s.mejorFuerzaMesa >= 109) return -999
+
+  // Tengo carta imbatible → máxima prioridad de enviar
+  if (s.tengoImbatible && !s.mesaRival) return 999
+
   let pts = 0
 
-  // Sin vira → nunca tiene sentido
-  if (!s.tengoVira) pts -= 35
+  if (s.tengo2Vira)    pts += 60
+  else if (mano.some(c => c.palo === viraPalo && c.valor === 12)) pts += 35
+  else if (mano.some(c => c.palo === viraPalo && c.valor === 11)) pts += 20
+  else if (mano.some(c => c.palo === viraPalo && c.valor === 1))  pts += 15
+  else if (s.tengoVira) pts += 5
 
-  // Fuerza de vira únicamente
-  const fuerzaVira = s.virasEnMano.reduce((sum, c) => sum + fuerzaCarta(c, viraPalo), 0)
-  pts += Math.min(fuerzaVira * 0.8, 50)
+  pts += Math.min(s.fuerzaVira * 0.4, 20)
 
-  if (mano.some(c => c.palo === viraPalo && c.valor === 2))               pts += 40
-  if (mano.some(c => c.palo === viraPalo && (c.valor === 12 || c.valor === 11))) pts += 20
-
-  const fuerzaNoVira = mano.filter(c => c.palo !== viraPalo)
-    .reduce((sum, c) => sum + fuerzaCarta(c, viraPalo), 0)
-  pts += Math.min(fuerzaNoVira * 0.08, 8)
-
-  if (s.companeroFuerte)       pts += 15
-  if (s.virasDescPorRival <= 2) pts += 12
+  if (s.companeroFuerte)        pts += 20
+  if (s.virasDescPorRival <= 2) pts += 10
   if (s.virasDescPorRival === 0) pts += 15
 
-  // ── FASE 3: lógica especial de mejor-de-3 ──
   if (estado.fase === 3) {
-    // Si ya voy ganando en mini-bazas → más agresivo
-    if (s.misBazas > s.rivalBazas)    pts += 20
-    // Si voy empatado → neutro
-    // Si voy perdiendo → muy cauteloso con el envío
-    if (s.puedePerder)                 pts -= 25
-    // Si el rival ya tiene 1 baza y yo 0 → nunca enviar a menos que tenga mano brutal
-    if (s.necesitoBaza)                pts -= 30
-    // Si es la primera mini-baza → más cauto (3 por jugar)
-    if (s.miniRonda === 0)             pts -= 10
-    // Si es la última mini-baza → más agresivo si voy ganando
-    if (s.miniRonda === 2 && s.misBazas === 1) pts += 25
+    if (s.misBazas > s.rivalBazas)              pts += 20
+    if (s.puedePerder)                           pts -= 30
+    if (s.necesitoBaza)                          pts -= 40
+    if (s.miniRonda === 0)                       pts -= 10
+    if (s.miniRonda === 2 && s.misBazas === 1)   pts += 25
   }
 
   if (s.rivalesFuertes) pts -= 20
   if (s.ventaja >= 6)   pts -= 15
-  if (s.puntosEllos >= 25) pts += 15
+  if (s.puntosEllos >= 25) pts += 10
   if (s.puntosEllos >= 27) pts += 10
 
   return pts
 }
 
-function deberiaEnviar(estado: EstadoJuego, jugador: number): boolean {
-  const viraPalo = estado.vira.palo
+function deberiaEnviar(estado: EstadoJuego, jugador: number, s: Situacion): boolean {
+  if (equipoRivalGanaMesa(estado, jugador)) return false
 
-  // Si hay cartas en mesa y mi equipo ya va perdiendo la baza → nunca pedir envío
+  // Si hay cartas en mesa y la mejor no puede ser superada por mi mano → no enviar
   const hayMesa = estado.cartasMesa.some(c => c !== null)
   if (hayMesa) {
-    let mejorFuerza = -1
-    let equipoGana: 0 | 1 | -1 = -1
-    for (let j = 0; j < 4; j++) {
-      const c = estado.cartasMesa[j]; if (!c) continue
-      const f = fuerzaCarta(c, viraPalo)
-      if (f > mejorFuerza) { mejorFuerza = f; equipoGana = equipo(j) }
-    }
-    // Si el equipo contrario va ganando → no pedir envío
-    if (equipoGana !== -1 && equipoGana !== equipo(jugador)) return false
+    const miMejor = Math.max(...s.mano.map(c => fuerzaCarta(c, s.viraPalo)))
+    if (s.mejorFuerzaMesa >= miMejor) return false
   }
 
-  return calcularFuerzaEnvio(estado, jugador) > (50 + Math.random() * 20 - 10)
+  const pts = calcularFuerzaEnvio(estado, jugador, s)
+  if (pts <= -100) return false
+  if (pts >= 900)  return true  // imbatible → siempre
+  return pts > (55 + Math.random() * 15 - 7)
 }
 
-function deberiaAceptar(estado: EstadoJuego, jugador: number): boolean {
-  const viraPalo = estado.vira.palo
+function deberiaAceptar(estado: EstadoJuego, jugador: number, s: Situacion): boolean {
+  const pts = calcularFuerzaEnvio(estado, jugador, s)
+  if (pts <= -100) return false
+  if (pts >= 900)  return true  // imbatible → siempre
 
-  // Si hay cartas en mesa y mi equipo va perdiendo → ser más conservador al aceptar
   const hayMesa = estado.cartasMesa.some(c => c !== null)
   if (hayMesa) {
-    let mejorFuerza = -1
-    let equipoGana: 0 | 1 | -1 = -1
-    for (let j = 0; j < 4; j++) {
-      const c = estado.cartasMesa[j]; if (!c) continue
-      const f = fuerzaCarta(c, viraPalo)
-      if (f > mejorFuerza) { mejorFuerza = f; equipoGana = equipo(j) }
+    const { fuerza: fMesa, equipoGana } = fuerzaCartaGanadoraMesa(estado)
+    const rivalGana = equipoGana !== -1 && equipoGana !== equipo(jugador)
+
+    if (rivalGana) {
+      const tengoViraGanadora = s.mano.some(c =>
+        c.palo === s.viraPalo && fuerzaCarta(c, s.viraPalo) > fMesa
+      )
+      if (!tengoViraGanadora) return false
+      return pts > 55
     }
-    // Si el equipo contrario va ganando → umbral mucho más alto para aceptar
-    if (equipoGana !== -1 && equipoGana !== equipo(jugador))
-      return calcularFuerzaEnvio(estado, jugador) > 85
+
+    if (fMesa < 100 && !s.tengoVira) return pts > 60
   }
 
-  return calcularFuerzaEnvio(estado, jugador) > (38 + Math.random() * 15 - 7)
+  return pts > (40 + Math.random() * 15 - 7)
 }
 
 // ── Selección de carta ────────────────────────────────────────
+// Se recalcula el análisis al momento con el estado actual
 
 function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]): Accion {
-  const s        = analizar(estado, jugador)
+  // Recalcular análisis con estado fresco (incluye todas las cartas ya en mesa)
+  const s       = analizar(estado, jugador)
   const { viraPalo, mano } = s
-  const hayMesa  = estado.cartasMesa.some(c => c !== null)
+  const hayMesa = estado.cartasMesa.some(c => c !== null)
 
   const candidatas = cartasLeg
     .map(id => mano.find(c => c.id === id))
@@ -234,20 +255,12 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
   if (candidatas.length === 0) return cartasLeg[0]
   if (candidatas.length === 1) return candidatas[0].id
 
-  // ── FASE 3: Lógica especial de mejor-de-3 ──
+  // ── FASE 3 ──
   if (estado.fase === 3) {
-    // Si ya ganamos 2 mini-bazas, no debería llegar aquí pero por si acaso
     if (s.yaTengoVictoria) return _cartaMasDebil(candidatas, viraPalo)
 
-    // Si voy ganando 1-0 → jugar con cautela, guardar vira para la siguiente
-    // Si voy perdiendo 0-1 → necesito ganar esta baza sí o sí → ser agresivo
-    // Si empate 0-0 o 1-1 → juego normal
-
     if (s.necesitoBaza) {
-      // Situación crítica: rival tiene 1 baza, yo 0. Debo ganar esta.
-      // Usar la carta más fuerte disponible
       if (!hayMesa) {
-        // Si tengo vira, tirarla para asegurar
         if (s.tengoVira) {
           const mejorVira = s.virasEnMano
             .filter(c => candidatas.some(x => x.id === c.id))
@@ -256,49 +269,37 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
         }
         return _cartaMasFuerte(candidatas, viraPalo)
       }
-      // Con cartas en mesa: ganar con lo mínimo posible si puedo
-      const fActual  = s.mejorFuerzaMesa
-      const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > fActual)
+      const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > s.mejorFuerzaMesa)
       if (queGanan.length > 0)
         return queGanan.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
-      // No puedo ganar → tirar la más débil
       const sinVira = candidatas.filter(c => c.palo !== viraPalo)
       return sinVira.length > 0 ? _cartaMasDebil(sinVira, viraPalo) : _cartaMasDebil(candidatas, viraPalo)
     }
 
-    if (s.misBazas === 1 && s.rivalBazas === 0) {
-      // Voy ganando 1-0 → preservar vira para la siguiente mini-baza
-      // Solo usar vira si es absolutamente necesario para ganar esta
-      if (!hayMesa) {
-        // Si el compañero señó fuerte → tirar carta débil, guardar vira
-        if (s.companeroFuerte) {
-          const sinVira = candidatas.filter(c => c.palo !== viraPalo)
-          if (sinVira.length > 0) return _cartaMasDebil(sinVira, viraPalo)
-        }
-        // Carta ganadora segura sin vira → usarla
-        const ganadoras = candidatas.filter(c =>
-          esGanadoraSegura(c, viraPalo, estado, jugador) && c.palo !== viraPalo
-        )
-        if (ganadoras.length > 0)
-          return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
-        // Si tengo carta ganadora segura de vira → solo usarla si no tengo otra opción
-        const ganadoarasVira = candidatas.filter(c => esGanadoraSegura(c, viraPalo, estado, jugador))
-        if (ganadoarasVira.length > 0 && candidatas.filter(c => c.palo !== viraPalo).length === 0)
-          return ganadoarasVira.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
-        // Guardar vira → tirar sin vira
+    if (s.misBazas === 1 && s.rivalBazas === 0 && !hayMesa) {
+      if (s.companeroFuerte) {
         const sinVira = candidatas.filter(c => c.palo !== viraPalo)
-        if (sinVira.length > 0) return _cartaMasFuerte(sinVira, viraPalo)
-        return _cartaMasFuerte(candidatas, viraPalo)
+        if (sinVira.length > 0) return _cartaMasDebil(sinVira, viraPalo)
       }
+      const ganadoras = candidatas.filter(c =>
+        esGanadoraSegura(c, viraPalo, estado, jugador) && c.palo !== viraPalo
+      )
+      if (ganadoras.length > 0)
+        return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+      const sinVira = candidatas.filter(c => c.palo !== viraPalo)
+      if (sinVira.length > 0) return _cartaMasFuerte(sinVira, viraPalo)
+      return _cartaMasFuerte(candidatas, viraPalo)
     }
   }
 
-  // ── LÓGICA GENERAL (fases 1/2 y fase 3 normal) ──
-
+  // ── LÓGICA GENERAL ──
   if (!hayMesa) {
-    const ganadoras = candidatas.filter(c => esGanadoraSegura(c, viraPalo, estado, jugador))
-    if (ganadoras.length > 0)
-      return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+    // Si tengo carta imbatible → tirar la más débil de ellas (guardar la buena)
+    if (s.tengoImbatible) {
+      const ganadoras = candidatas.filter(c => esGanadoraSegura(c, viraPalo, estado, jugador))
+      if (ganadoras.length > 0)
+        return ganadoras.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
+    }
 
     if (s.companeroFuerte && !s.tengoViraAlta)
       return _cartaMedia(candidatas, viraPalo)
@@ -320,6 +321,7 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
     return _cartaMasFuerte(candidatas, viraPalo)
   }
 
+  // Con cartas en mesa — recalcular quién gana ahora mismo
   if (s.mesaGanaEquipo) {
     if (s.mejorFuerzaMesa < 50 && s.tengoVira) {
       const viraMasDebil = s.virasEnMano
@@ -332,8 +334,8 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
     return _cartaMasDebil(candidatas, viraPalo)
   }
 
-  const fActual  = s.mejorFuerzaMesa
-  const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > fActual)
+  // Mi equipo NO va ganando → intentar superar con mínima carta
+  const queGanan = candidatas.filter(c => fuerzaCarta(c, viraPalo) > s.mejorFuerzaMesa)
   if (queGanan.length > 0)
     return queGanan.sort((a,b) => fuerzaCarta(a,viraPalo) - fuerzaCarta(b,viraPalo))[0].id
 
@@ -343,13 +345,19 @@ function elegirCarta(estado: EstadoJuego, jugador: number, cartasLeg: Accion[]):
 }
 
 // ── Política heurística ───────────────────────────────────────
+// Recalcula el estado completo en cada llamada → siempre fresco
 
 function politicaHeuristica(estado: EstadoJuego, jugador: number, legales: Accion[]): Accion {
   const cartasLeg = legales.filter(a => !Object.values(ACCION).includes(a as any))
 
+  // Recalcular situación con estado actual (puede haber nuevas cartas en mesa)
+  const s = analizar(estado, jugador)
+
   if (estado.esperandoEnvio) {
-    if (deberiaAceptar(estado, jugador)) {
-      if (legales.includes(ACCION.ENVIO) && calcularFuerzaEnvio(estado, jugador) > 80)
+    if (deberiaAceptar(estado, jugador, s)) {
+      if (legales.includes(ACCION.ENVIO) &&
+          calcularFuerzaEnvio(estado, jugador, s) > 90 &&
+          !equipoRivalGanaMesa(estado, jugador))
         return ACCION.ENVIO
       return ACCION.QUIERO
     }
@@ -357,7 +365,16 @@ function politicaHeuristica(estado: EstadoJuego, jugador: number, legales: Accio
   }
 
   if (legales.includes(ACCION.ENVIO) && cartasLeg.length > 0) {
-    if (deberiaEnviar(estado, jugador)) return ACCION.ENVIO
+    // Si tengo carta imbatible y mesa vacía → SIEMPRE pedir envío
+    const mesaVacia = estado.cartasMesa.every(c => c === null)
+    if (s.tengoImbatible && mesaVacia && !equipoRivalGanaMesa(estado, jugador))
+      return ACCION.ENVIO
+
+    // Si mi equipo va ganando con el 2 de vira en mesa → pedir envío
+    if (!equipoRivalGanaMesa(estado, jugador) && s.mesaGanaEquipo && s.mejorFuerzaMesa >= 109)
+      return ACCION.ENVIO
+
+    if (deberiaEnviar(estado, jugador, s)) return ACCION.ENVIO
   }
 
   if (cartasLeg.length === 0) return legales[0]
@@ -461,7 +478,10 @@ function mctsEnMundo(estadoInicial: EstadoJuego, jugadorIA: number, config: Conf
 
     while (!nodo.sinExplorar && !nodo.esHoja) {
       nodo = nodo.hijos.reduce((m,h) => h.ucb1(config.C) > m.ucb1(config.C) ? h : m)
-      if (nodo.accion) { aplicarAccion(estado, jActual, nodo.accion); jActual = estado.jugadorActual >= 0 ? estado.jugadorActual : jActual }
+      if (nodo.accion) {
+        aplicarAccion(estado, jActual, nodo.accion)
+        jActual = estado.jugadorActual >= 0 ? estado.jugadorActual : jActual
+      }
     }
 
     if (nodo.sinExplorar && !estado.terminada) {
@@ -500,13 +520,31 @@ function _rollout(estado: EstadoJuego, jugador: number, jugadorOriginal: number,
 }
 
 // ── Punto de entrada ──────────────────────────────────────────
+// Decisiones críticas (envío, respuesta, carta clara) → heurística directa e instantánea
+// Decisiones complejas → MCTS
 
 export function elegirJugada(estado: EstadoJuego, jugadorIA: number, config: ConfigMCTS = DIFICULTAD.dificil): Accion {
   const legales = accionesLegales(estado, jugadorIA)
   if (legales.length === 0) throw new Error(`Sin acciones para J${jugadorIA}`)
   if (legales.length === 1) return legales[0]
-  if (legales.length <= 2)  return politicaHeuristica(estado, jugadorIA, legales)
 
+  // Recalcular situación fresca
+  const s = analizar(estado, jugadorIA)
+
+  // Decisiones de envío → siempre heurística directa (instantánea y con estado real)
+  if (estado.esperandoEnvio) return politicaHeuristica(estado, jugadorIA, legales)
+
+  // Tengo carta imbatible → pedir envío sin deliberar
+  if (legales.includes(ACCION.ENVIO)) {
+    const mesaVacia = estado.cartasMesa.every(c => c === null)
+    if (s.tengoImbatible && mesaVacia && !equipoRivalGanaMesa(estado, jugadorIA))
+      return ACCION.ENVIO
+  }
+
+  // Solo 2 opciones → heurística directa
+  if (legales.length <= 2) return politicaHeuristica(estado, jugadorIA, legales)
+
+  // Múltiples opciones → MCTS para deliberar
   const totalScores = new Map<Accion, number>()
   const conteos     = new Map<Accion, number>()
 
