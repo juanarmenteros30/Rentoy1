@@ -180,10 +180,43 @@ function calcularFuerzaEnvio(estado: EstadoJuego, jugador: number): number {
 }
 
 function deberiaEnviar(estado: EstadoJuego, jugador: number): boolean {
+  const viraPalo = estado.vira.palo
+
+  // Si hay cartas en mesa y mi equipo ya va perdiendo la baza → nunca pedir envío
+  const hayMesa = estado.cartasMesa.some(c => c !== null)
+  if (hayMesa) {
+    let mejorFuerza = -1
+    let equipoGana: 0 | 1 | -1 = -1
+    for (let j = 0; j < 4; j++) {
+      const c = estado.cartasMesa[j]; if (!c) continue
+      const f = fuerzaCarta(c, viraPalo)
+      if (f > mejorFuerza) { mejorFuerza = f; equipoGana = equipo(j) }
+    }
+    // Si el equipo contrario va ganando → no pedir envío
+    if (equipoGana !== -1 && equipoGana !== equipo(jugador)) return false
+  }
+
   return calcularFuerzaEnvio(estado, jugador) > (50 + Math.random() * 20 - 10)
 }
 
 function deberiaAceptar(estado: EstadoJuego, jugador: number): boolean {
+  const viraPalo = estado.vira.palo
+
+  // Si hay cartas en mesa y mi equipo va perdiendo → ser más conservador al aceptar
+  const hayMesa = estado.cartasMesa.some(c => c !== null)
+  if (hayMesa) {
+    let mejorFuerza = -1
+    let equipoGana: 0 | 1 | -1 = -1
+    for (let j = 0; j < 4; j++) {
+      const c = estado.cartasMesa[j]; if (!c) continue
+      const f = fuerzaCarta(c, viraPalo)
+      if (f > mejorFuerza) { mejorFuerza = f; equipoGana = equipo(j) }
+    }
+    // Si el equipo contrario va ganando → umbral mucho más alto para aceptar
+    if (equipoGana !== -1 && equipoGana !== equipo(jugador))
+      return calcularFuerzaEnvio(estado, jugador) > 85
+  }
+
   return calcularFuerzaEnvio(estado, jugador) > (38 + Math.random() * 15 - 7)
 }
 
