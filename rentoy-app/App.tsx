@@ -124,7 +124,7 @@ function CartaComp({
         ]}>
           <Image
             source={imagenCarta}
-            style={{ width: '100%', height: '100%', borderRadius: 5 }}
+            style={{ width: '100%', height: '100%', borderRadius: 2 }}
             resizeMode="cover"
           />
         </Animated.View>
