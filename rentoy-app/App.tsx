@@ -27,9 +27,10 @@ const SENA_TEXTO: Record<string,string> = {
 const NOMBRE_JUGADOR = ['Tú','Rival 2','Compañero','Rival 1']
 const COLOR_FONDO_JUGADOR = [C.azul, C.rojo, C.azul, C.rojo]
 const DELAY_IA = 1300
-
+const CARTA_DORSO = require('./assets/dorso.png') //Dorso
 // ── Mapa de imágenes de cartas ────────────────────────────────
 const CARTA_IMAGEN: Record<string, any> = {
+  
   // OROS
   'A_oros': require('./assets/Aoro.png'),
   '2_oros': require('./assets/2oro.png'),
@@ -138,12 +139,20 @@ function CartaComp({
   if (!carta && boca) return <View style={{ width: w, height: h, margin: 3 }} />
 
   if (!boca) {
-    return (
-      <View style={[estilos.cartaDorso, { width: w, height: h }]}>
-        <View style={estilos.cartaDorsoInner} />
-      </View>
-    )
-  }
+  return (
+    <View style={{ width: w, height: h, margin: 3 }}>
+      <Image
+        source={CARTA_DORSO}
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: 7
+        }}
+        resizeMode="cover"
+      />
+    </View>
+  )
+}
 
   if (!carta) return <View style={{ width: w, height: h, margin: 3 }} />
 
