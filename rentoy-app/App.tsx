@@ -30,8 +30,54 @@ const DELAY_IA = 1300
 
 // ── Mapa de imágenes de cartas ────────────────────────────────
 const CARTA_IMAGEN: Record<string, any> = {
-  '1_oros': require('./assets/Aoro.png'),
+  // OROS
+  'A_oros': require('./assets/Aoro.png'),
   '2_oros': require('./assets/2oro.png'),
+  '3_oros': require('./assets/3oro.png'),
+  '4_oros': require('./assets/4oro.png'),
+  '5_oros': require('./assets/5oro.png'),
+  '6_oros': require('./assets/6oro.png'),
+  '7_oros': require('./assets/7oro.png'),
+  '10_oros': require('./assets/10oro.png'),
+  '11_oros': require('./assets/11oro.png'),
+  '12_oros': require('./assets/12oro.png'),
+
+  // COPAS
+  'A_copas': require('./assets/Acopa.png'),
+  '2_copas': require('./assets/2copa.png'),
+  '3_copas': require('./assets/3copa.png'),
+  '4_copas': require('./assets/4copa.png'),
+  '5_copas': require('./assets/5copa.png'),
+  '6_copas': require('./assets/6copa.png'),
+  '7_copas': require('./assets/7copa.png'),
+  '10_copas': require('./assets/10copa.png'),
+  '11_copas': require('./assets/11copa.png'),
+  '12_copas': require('./assets/12copa.png'),
+
+  // ESPADAS
+  'A_espadas': require('./assets/Aespada.png'),
+  '2_espadas': require('./assets/2espada.png'),
+  '3_espadas': require('./assets/3espada.png'),
+  '4_espadas': require('./assets/4espada.png'),
+  '5_espadas': require('./assets/5espada.png'),
+  '6_espadas': require('./assets/6espada.png'),
+  '7_espadas': require('./assets/7espada.png'),
+  '10_espadas': require('./assets/10espada.png'),
+  '11_espadas': require('./assets/11espada.png'),
+  '12_espadas': require('./assets/12espada.png'),
+
+  // BASTOS
+  'A_bastos': require('./assets/Abasto.png'),
+  '2_bastos': require('./assets/2basto.png'),
+  '3_bastos': require('./assets/3basto.png'),
+  '4_bastos': require('./assets/4basto.png'),
+  '5_bastos': require('./assets/5basto.png'),
+  '6_bastos': require('./assets/6basto.png'),
+  '7_bastos': require('./assets/7basto.png'),
+  '10_bastos': require('./assets/10basto.png'),
+  '11_bastos': require('./assets/11basto.png'),
+  '12_bastos': require('./assets/12basto.png'),
+
 }
 
 // ── Animación de Turno (Parpadeo) ─────────────────────────────
@@ -100,6 +146,8 @@ function CartaComp({
   }
 
   if (!carta) return <View style={{ width: w, height: h, margin: 3 }} />
+
+  
 
   const imagenCarta = CARTA_IMAGEN[carta.id]
 
