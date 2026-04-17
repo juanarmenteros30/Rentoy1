@@ -32,7 +32,7 @@ const CARTA_DORSO = require('./assets/dorso.png') //Dorso
 const CARTA_IMAGEN: Record<string, any> = {
   
   // OROS
-  'A_oros': require('./assets/Aoro.png'),
+  '1_oros': require('./assets/Aoro.png'),
   '2_oros': require('./assets/2oro.png'),
   '3_oros': require('./assets/3oro.png'),
   '4_oros': require('./assets/4oro.png'),
@@ -44,7 +44,7 @@ const CARTA_IMAGEN: Record<string, any> = {
   '12_oros': require('./assets/12oro.png'),
 
   // COPAS
-  'A_copas': require('./assets/Acopa.png'),
+  '1_copas': require('./assets/Acopa.png'),
   '2_copas': require('./assets/2copa.png'),
   '3_copas': require('./assets/3copa.png'),
   '4_copas': require('./assets/4copa.png'),
@@ -56,7 +56,7 @@ const CARTA_IMAGEN: Record<string, any> = {
   '12_copas': require('./assets/12copa.png'),
 
   // ESPADAS
-  'A_espadas': require('./assets/Aespada.png'),
+  '1_espadas': require('./assets/Aespada.png'),
   '2_espadas': require('./assets/2espada.png'),
   '3_espadas': require('./assets/3espada.png'),
   '4_espadas': require('./assets/4espada.png'),
@@ -68,7 +68,7 @@ const CARTA_IMAGEN: Record<string, any> = {
   '12_espadas': require('./assets/12espada.png'),
 
   // BASTOS
-  'A_bastos': require('./assets/Abasto.png'),
+  '1_bastos': require('./assets/Abasto.png'),
   '2_bastos': require('./assets/2basto.png'),
   '3_bastos': require('./assets/3basto.png'),
   '4_bastos': require('./assets/4basto.png'),
@@ -133,8 +133,8 @@ function CartaComp({
     }
   }, [destacada])
 
-  const w = tamaño === 'mini' ? (esMovil ? 36 : 48) : tamaño === 'grande' ? (esMovil ? 60 : 80) : (esMovil ? 46 : 56)
-  const h = tamaño === 'mini' ? (esMovil ? 52 : 70) : tamaño === 'grande' ? (esMovil ? 88 : 115) : (esMovil ? 66 : 80)
+  const w = tamaño === 'mini' ? (esMovil ? 40 : 52) : tamaño === 'grande' ? (esMovil ? 80 : 100) : (esMovil ? 60 : 70)
+  const h = tamaño === 'mini' ? (esMovil ? 60 : 80) : tamaño === 'grande' ? (esMovil ? 110 : 140) : (esMovil ? 85 : 100)
 
   if (!carta && boca) return <View style={{ width: w, height: h, margin: 3 }} />
 
