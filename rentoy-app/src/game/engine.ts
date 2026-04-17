@@ -96,6 +96,7 @@ export interface EstadoJuego {
   bazaCompleta:          boolean
   terminada:             boolean
   ganador:               0 | 1 | -1
+  mazoRestante: Carta[]
 }
 
 export function equipo(j: number): 0 | 1 { return (j % 2) as 0 | 1 }
@@ -132,20 +133,17 @@ export function clonarEstado(e: EstadoJuego): EstadoJuego {
     bazaCompleta:          e.bazaCompleta,
     terminada:             e.terminada,
     ganador:               e.ganador,
+    mazoRestante: [...e.mazoRestante],
   }
 }
 
-export function repartirFase(estado: EstadoJuego, barajaOpt?: Carta[]): void {
+export function repartirFase(estado: EstadoJuego): void {
   const n = estado.fase
-  let baraja = barajaOpt
-  if (!baraja) {
-    const yaUsadas = new Set(estado.cartasJugadas.map(c => c.id))
-    yaUsadas.add(estado.vira.id)
-    if (estado.cartaSorteo) yaUsadas.add(estado.cartaSorteo.id)
-    baraja = barajar(crearBaraja().filter(c => !yaUsadas.has(c.id)))
+
+  for (let j = 0; j < 4; j++) {
+    estado.manos[j] = estado.mazoRestante.splice(0, n)
   }
-  for (let j = 0; j < 4; j++)
-    estado.manos[j] = baraja.splice(baraja.length - n, n)
+
   estado.cartasMesa            = [null, null, null, null]
   estado.bazasGanadas          = [0, 0]
   estado.miniRonda             = 0
@@ -174,34 +172,35 @@ export function crearEstadoInicial(): EstadoJuego {
   const jugadorInicio   = derechaDeJ[jugadorConPalo]
 
   const estado: EstadoJuego = {
-    manos:                 [[], [], [], []],
-    vira,
-    jugadorActual:         jugadorInicio,
-    jugadorInicioPartida:  jugadorInicio,
-    turno:                 jugadorInicio,
-    fase:                  1,
-    miniRonda:             0,
-    cartasMesa:            [null, null, null, null],
-    cartasJugadas:         [],
-    puntos:                [0, 0],
-    valorMano:             1,
-    senas:                 ['nada', 'nada', 'nada', 'nada'],
-    bazasGanadas:          [0, 0],
-    jugadorInicioBaza:     jugadorInicio,
-    jugadorInicioRonda:    jugadorInicio,
-    esperandoEnvio:        false,
-    jugadorPidioEnvio:     -1,
-    jugadorInicioEnvio:    -1,
-    jugadorRespondeEnvio:  -1,
-    bazaCompleta:          false,
-    puntosAcumuladosFase3: 0,
-    cartaSorteo,
-    palosJugadores:        palosAleatorios,
-    terminada:             false,
-    ganador:               -1,
-  }
+  manos: [[], [], [], []],
+  vira,
+  mazoRestante: baraja, // 👈 AÑADE ESTO
+  jugadorActual: jugadorInicio,
+  jugadorInicioPartida: jugadorInicio,
+  turno: jugadorInicio,
+  fase: 1,
+  miniRonda: 0,
+  cartasMesa: [null, null, null, null],
+  cartasJugadas: [],
+  puntos: [0, 0],
+  valorMano: 1,
+  senas: ['nada', 'nada', 'nada', 'nada'],
+  bazasGanadas: [0, 0],
+  jugadorInicioBaza: jugadorInicio,
+  jugadorInicioRonda: jugadorInicio,
+  esperandoEnvio: false,
+  jugadorPidioEnvio: -1,
+  jugadorInicioEnvio: -1,
+  jugadorRespondeEnvio: -1,
+  bazaCompleta: false,
+  puntosAcumuladosFase3: 0,
+  cartaSorteo,
+  palosJugadores: palosAleatorios,
+  terminada: false,
+  ganador: -1,
+}
 
-  repartirFase(estado, baraja)
+  repartirFase(estado)
   calcularSenasIA(estado)
   estado.jugadorActual      = jugadorInicio
   estado.jugadorInicioBaza  = jugadorInicio
@@ -350,41 +349,44 @@ function _resolverBaza(estado: EstadoJuego): void {
 }
 
 function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
-  const faseAnterior   = estado.fase
   const inicioRondaAnt = estado.jugadorInicioRonda
 
-  const maxPts = Math.max(...estado.puntos)
-  if (maxPts >= 21) {
-    estado.fase = 3
-  } else {
-    estado.fase = ((estado.fase % 3) + 1) as 1|2|3
-  }
-
-  if (estado.fase === 1) {
+  // 👉 SI ESTAMOS EN FASE 3 → NUEVA MANO
+  if (estado.fase === 3) {
     const nuevoInicio = (inicioRondaAnt + 1) % 4
+
     const baraja = barajar(crearBaraja())
-    estado.vira = baraja[0]
+    const vira = baraja.pop()!
+
+    estado.vira = vira
+    estado.mazoRestante = baraja
     estado.cartasJugadas = []
-    repartirFase(estado)
-    calcularSenasIA(estado)
+
+    estado.fase = 1
+
     estado.jugadorInicioRonda = nuevoInicio
     estado.jugadorActual      = nuevoInicio
     estado.jugadorInicioBaza  = nuevoInicio
     estado.turno              = nuevoInicio
-  } else if (estado.fase === 3 && faseAnterior !== 3) {
-    repartirFase(estado)
-    calcularSenasIA(estado)
-    estado.jugadorInicioRonda = inicioRondaAnt
-    estado.jugadorActual      = inicioRondaAnt
-    estado.jugadorInicioBaza  = inicioRondaAnt
-    estado.turno              = inicioRondaAnt
-  } else {
-    repartirFase(estado)
-    calcularSenasIA(estado)
-    estado.jugadorActual     = inicioRondaAnt
-    estado.jugadorInicioBaza = inicioRondaAnt
-    estado.turno             = inicioRondaAnt
+
   }
+  
+  
+else {
+  estado.fase = (estado.fase + 1) as 1 | 2 | 3
+
+  // ✅ SIEMPRE empieza el mismo jugador en la mano
+  const jugadorInicio = estado.jugadorInicioRonda
+
+  estado.jugadorActual     = jugadorInicio
+  estado.jugadorInicioBaza = jugadorInicio
+  estado.turno             = jugadorInicio
+}
+
+
+  repartirFase(estado)
+  calcularSenasIA(estado)
+  estado.bazaCompleta = false
 }
 
 function _comprobarFin(estado: EstadoJuego): void {

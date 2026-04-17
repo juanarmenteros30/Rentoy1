@@ -75,10 +75,19 @@ export class PartidaSinglePlayer {
       return true
     }
 
-    if (this.esTurnoHumano) return false
+ // 👉 solo bloquea si es humano REALMENTE y puede jugar
+
 
     const jugadorIA = this.estado.jugadorActual
     if (jugadorIA < 0) return false
+    console.log("IA DEBUG", {
+  jugador: jugadorIA,
+  manos: this.estado.manos[jugadorIA],
+  legales: accionesLegales(this.estado, jugadorIA),
+  cartasMesa: this.estado.cartasMesa,
+  fase: this.estado.fase
+})
+
     const legales = accionesLegales(this.estado, jugadorIA)
     if (legales.length === 0) return false
 
