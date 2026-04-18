@@ -97,6 +97,7 @@ export interface EstadoJuego {
   terminada:             boolean
   ganador:               0 | 1 | -1
   mazoRestante: Carta[]
+  soloFase3: boolean
 }
 
 export function equipo(j: number): 0 | 1 { return (j % 2) as 0 | 1 }
@@ -198,6 +199,7 @@ export function crearEstadoInicial(): EstadoJuego {
   palosJugadores: palosAleatorios,
   terminada: false,
   ganador: -1,
+  soloFase3: false,
 }
 
   repartirFase(estado)
@@ -351,9 +353,9 @@ function _resolverBaza(estado: EstadoJuego): void {
 function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
   const inicioRondaAnt = estado.jugadorInicioRonda
 
-  // 👉 SI ESTAMOS EN FASE 3 → NUEVA MANO
+  // 👉 NUEVA MANO (después de fase 3)
   if (estado.fase === 3) {
-    const nuevoInicio = (inicioRondaAnt + 1) % 4
+    const nuevoInicio = (inicioRondaAnt + 3) % 4
 
     const baraja = barajar(crearBaraja())
     const vira = baraja.pop()!
@@ -362,27 +364,25 @@ function _nuevaFase(estado: EstadoJuego, ganadorBaza?: number): void {
     estado.mazoRestante = baraja
     estado.cartasJugadas = []
 
-    estado.fase = 1
+    // 👇 CLAVE
+    const maxPts = Math.max(...estado.puntos)
+estado.fase = maxPts >= 21 ? 3 : 1
 
     estado.jugadorInicioRonda = nuevoInicio
     estado.jugadorActual      = nuevoInicio
     estado.jugadorInicioBaza  = nuevoInicio
     estado.turno              = nuevoInicio
+  } 
+  else {
+    // 👉 avanzar normal (1 → 2 → 3)
+    estado.fase = (estado.fase + 1) as 1 | 2 | 3
 
+    const jugadorInicio = estado.jugadorInicioRonda
+
+    estado.jugadorActual     = jugadorInicio
+    estado.jugadorInicioBaza = jugadorInicio
+    estado.turno             = jugadorInicio
   }
-  
-  
-else {
-  estado.fase = (estado.fase + 1) as 1 | 2 | 3
-
-  // ✅ SIEMPRE empieza el mismo jugador en la mano
-  const jugadorInicio = estado.jugadorInicioRonda
-
-  estado.jugadorActual     = jugadorInicio
-  estado.jugadorInicioBaza = jugadorInicio
-  estado.turno             = jugadorInicio
-}
-
 
   repartirFase(estado)
   calcularSenasIA(estado)
@@ -430,6 +430,9 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
       const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
       const totalPuntos  = estado.puntosAcumuladosFase3 + estado.valorMano
       estado.puntos[eqFase] += totalPuntos
+      if (Math.max(...estado.puntos) >= 21) {
+  estado.soloFase3 = true
+}
       _comprobarFin(estado)
       if (!estado.terminada) _nuevaFase(estado, ganador)
     } else {
@@ -444,10 +447,16 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
       estado.esperandoEnvio    = false
     }
   } else {
-    estado.puntos[eqGanador] += estado.valorMano
-    _comprobarFin(estado)
-    if (!estado.terminada) _nuevaFase(estado, ganador)
+  estado.puntos[eqGanador] += estado.valorMano
+
+  // 👇 AÑADE ESTO JUSTO AQUÍ
+  if (Math.max(...estado.puntos) >= 21) {
+    estado.soloFase3 = true
   }
+
+  _comprobarFin(estado)
+  if (!estado.terminada) _nuevaFase(estado, ganador)
+}
 }
 
 export function evaluarMano(mano: Carta[], viraPalo: Palo): number {
