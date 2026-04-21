@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity } from 'react-native'
+import { View, Text, TouchableOpacity, Animated } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
 import CartaComp from '../components/Carta'
 
 const PALO_SIMBOLO = {
@@ -31,26 +32,57 @@ export default function PantallaSorteo({
 
   const jugadorConPalo = palosJugadores.indexOf(cartaSorteo.palo)
 
-  const esInicio = (index: number) => index === jugadorInicio
+  // 🎬 ANIMACIONES
+  const animCarta = useRef(new Animated.Value(0)).current
+  const animGlow = useRef(new Animated.Value(0)).current
+  
 
- const estiloJugador = (index: number) => ({
-  color: jugadorConPalo === index
-    ? '#d4af37' // solo ganador en dorado
-    : PALO_COLOR[palosJugadores[index]],
+  useEffect(() => {
+    // carta aparece
+    Animated.timing(animCarta, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true
+    }).start(() => {
+      // glow ganador
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(animGlow, { toValue: 1, duration: 700, useNativeDriver: false }),
+          Animated.timing(animGlow, { toValue: 0, duration: 700, useNativeDriver: false })
+        ])
+      ).start()
 
-  fontWeight: jugadorConPalo === index ? 'bold' : '600',
-  fontSize: jugadorConPalo === index ? 18 : 15
-})
- 
+      // mostrar resultado
+     
+    })
+  }, [])
 
-const fondoJugador = (index: number) => ({
-  backgroundColor: jugadorConPalo === index
-    ? 'rgba(212,175,55,0.35)'
-    : 'rgba(0,0,0,0.3)',
+  // 🎯 estilos
+  const estiloJugador = (index: number) => ({
+    color: jugadorConPalo === index
+      ? '#d4af37'
+      : PALO_COLOR[palosJugadores[index]],
+    fontWeight: jugadorConPalo === index ? 'bold' : '600',
+    fontSize: jugadorConPalo === index ? 18 : 15
+  })
 
-  borderWidth: jugadorConPalo === index ? 2 : 0,
-  borderColor: '#d4af37'
-})
+  const fondoJugador = (index: number) => {
+    if (jugadorConPalo === index) {
+      return {
+        backgroundColor: animGlow.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['rgba(212,175,55,0.25)', 'rgba(212,175,55,0.45)']
+        }),
+        borderWidth: 2,
+        borderColor: '#d4af37'
+      }
+    }
+
+    return {
+      backgroundColor: 'rgba(0,0,0,0.3)'
+    }
+  }
+
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f4c25' }}>
       
@@ -61,7 +93,7 @@ const fondoJugador = (index: number) => ({
       {/* 🟡 MESA */}
       <View style={{ marginTop: 30, width: 360, height: 300, justifyContent: 'center', alignItems: 'center' }}>
 
-        {/* MESA */}
+        {/* mesa */}
         <View style={{
           position: 'absolute',
           width: 340,
@@ -72,18 +104,23 @@ const fondoJugador = (index: number) => ({
           borderColor: '#d4af37'
         }}/>
 
-        {/* CARTA */}
-        <View style={{
+        {/* carta animada */}
+        <Animated.View style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          transform: [{ translateX: -40 }, { translateY: -70 }]
+          transform: [
+            { translateX: -40 },
+            { translateY: -70 },
+            { scale: animCarta }
+          ],
+          opacity: animCarta
         }}>
           <CartaComp carta={cartaSorteo} tamaño="grande" />
-        </View>
+        </Animated.View>
 
         {/* COMPAÑERO */}
-        <View style={{
+        <Animated.View style={{
           position: 'absolute',
           top: -25,
           alignItems: 'center',
@@ -98,10 +135,10 @@ const fondoJugador = (index: number) => ({
           <Text style={estiloJugador(2)}>
             Compañero
           </Text>
-        </View>
+        </Animated.View>
 
         {/* RIVAL 2 */}
-        <View style={{
+        <Animated.View style={{
           position: 'absolute',
           left: 15,
           top: '40%',
@@ -117,10 +154,10 @@ const fondoJugador = (index: number) => ({
           <Text style={estiloJugador(1)}>
             Rival 2
           </Text>
-        </View>
+        </Animated.View>
 
         {/* RIVAL 1 */}
-        <View style={{
+        <Animated.View style={{
           position: 'absolute',
           right: 15,
           top: '40%',
@@ -136,10 +173,10 @@ const fondoJugador = (index: number) => ({
           <Text style={estiloJugador(3)}>
             Rival 1
           </Text>
-        </View>
+        </Animated.View>
 
         {/* TÚ */}
-        <View style={{
+        <Animated.View style={{
           position: 'absolute',
           bottom: -25,
           alignItems: 'center',
@@ -154,30 +191,29 @@ const fondoJugador = (index: number) => ({
           <Text style={estiloJugador(0)}>
             Tú
           </Text>
-        </View>
+        </Animated.View>
 
       </View>
 
-      {/* 🏆 QUIÉN EMPIEZA */}
-      <Text style={{
-        color: '#d4af37',
-        marginTop: 25,
-        fontWeight: 'bold',
-        fontSize: 20
-      }}>
-        🏆 Empieza {NOMBRE_JUGADOR[jugadorInicio]}
-      </Text>
+      {/* RESULTADO  */}
+     <Text style={{
+  color: '#d4af37',
+  marginTop: 25,
+  fontWeight: 'bold',
+  fontSize: 20
+}}>
+  🏆 Empieza {NOMBRE_JUGADOR[jugadorInicio]}
+</Text>
 
-      {/* 🧠 EXPLICACIÓN CLARA */}
-      <Text style={{
-        color: '#fff',
-        fontSize: 13,
-        opacity: 0.7,
-        marginTop: 6,
-        textAlign: 'center'
-      }}>
-        El ganador del sorteo reparte. Empieza el siguiente jugador.
-      </Text>
+<Text style={{
+  color: '#fff',
+  fontSize: 13,
+  opacity: 0.7,
+  marginTop: 6,
+  textAlign: 'center'
+}}>
+  El ganador reparte. Empieza el siguiente jugador.
+</Text>
 
       {/* LEYENDA */}
       <View style={{ marginTop: 10, opacity: 0.6 }}>
