@@ -220,7 +220,7 @@ export function accionesLegales(estado: EstadoJuego, jugador: number): Accion[] 
   if (estado.esperandoEnvio) {
     // Solo puede subir el envío si no es quien lo inició originalmente
     // y si el valorMano aún no ha llegado al máximo (12)
-    if (!es2929(estado) && estado.valorMano < 12 && jugador !== estado.jugadorInicioEnvio)
+    if (!es2929(estado) && estado.valorMano < 30 && jugador !== estado.jugadorInicioEnvio)
       legales.push(ACCION.ENVIO)
     legales.push(ACCION.QUIERO)
     legales.push(ACCION.ME_VOY)
@@ -263,14 +263,18 @@ export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Acci
       estado.jugadorActual      = estado.jugadorInicioEnvio
       estado.jugadorInicioEnvio = -1
     } else if (accion === ACCION.ME_VOY) {
-      estado.puntos[equipo(estado.jugadorPidioEnvio)] += 1
+     const puntosGanados = estado.valorMano > 1 ? estado.valorEnvioAnterior : 1
+estado.puntos[equipo(estado.jugadorPidioEnvio)] += puntosGanados
       estado.esperandoEnvio     = false
       estado.jugadorInicioEnvio = -1
       _comprobarFin(estado)
       if (!estado.terminada) _nuevaFase(estado)
     } else if (accion === ACCION.ENVIO) {
-      // Contraenvío: jugadorInicioEnvio NO se toca, sigue siendo quien pidió primero
-      estado.valorMano            = Math.min(estado.valorMano + 3, 12)
+
+  // 🔥 CLAVE: guardar valor anterior SIEMPRE
+  estado.valorEnvioAnterior = estado.valorMano
+
+  estado.valorMano = Math.min(estado.valorMano + 3, 30)
       estado.jugadorPidioEnvio    = jugador
       const eqPidio               = equipo(jugador)
       const responde              = [0,1,2,3].find(j => equipo(j) !== eqPidio)!
@@ -286,7 +290,8 @@ export function aplicarAccion(estado: EstadoJuego, jugador: number, accion: Acci
       _comprobarFin(estado)
       return
     }
-    estado.valorMano            = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 12)
+    estado.valorEnvioAnterior = estado.valorMano
+    estado.valorMano            = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 30)
     estado.jugadorPidioEnvio    = jugador
     // Solo guardar el iniciador si es el primer envío de la cadena
     if (estado.jugadorInicioEnvio === -1) estado.jugadorInicioEnvio = jugador
@@ -423,30 +428,35 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
   const eqGanador = equipo(ganador)
 
   if (estado.fase === 3) {
-    const alguienGanoDos = Math.max(...estado.bazasGanadas) >= 2
-    const todasJugadas   = estado.miniRonda >= 3
+  const alguienGanoDos = Math.max(...estado.bazasGanadas) >= 2
+  const todasJugadas   = estado.miniRonda >= 3
 
-    if (alguienGanoDos || todasJugadas) {
-      const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
-      const totalPuntos  = estado.puntosAcumuladosFase3 + estado.valorMano
-      estado.puntos[eqFase] += totalPuntos
-      if (Math.max(...estado.puntos) >= 21) {
-  estado.soloFase3 = true
-}
-      _comprobarFin(estado)
-      if (!estado.terminada) _nuevaFase(estado, ganador)
-    } else {
-      estado.puntosAcumuladosFase3 += estado.valorMano
-      estado.cartasMesa        = [null, null, null, null]
-      estado.jugadorInicioBaza = ganador
-      estado.jugadorActual     = ganador
-      estado.turno             = ganador
-      estado.valorMano         = 1
-      estado.jugadorPidioEnvio = -1
-      estado.jugadorInicioEnvio = -1
-      estado.esperandoEnvio    = false
+  if (alguienGanoDos || todasJugadas) {
+    const eqFase: 0|1 = estado.bazasGanadas[0] >= 2 ? 0 : 1
+
+    // ✅ SOLO cuenta el último valor del envío
+    estado.puntos[eqFase] += estado.valorMano
+
+    if (Math.max(...estado.puntos) >= 21) {
+      estado.soloFase3 = true
     }
+
+    _comprobarFin(estado)
+    if (!estado.terminada) _nuevaFase(estado, ganador)
   } else {
+    estado.cartasMesa        = [null, null, null, null]
+    estado.jugadorInicioBaza = ganador
+    estado.jugadorActual     = ganador
+    estado.turno             = ganador
+
+    // ⚠️ IMPORTANTE: NO resetear valorMano
+    // estado.valorMano = 1 ❌ (esto rompe el envío acumulado)
+
+    estado.jugadorPidioEnvio = -1
+    estado.jugadorInicioEnvio = -1
+    estado.esperandoEnvio    = false
+  }
+} else {
   estado.puntos[eqGanador] += estado.valorMano
 
   // 👇 AÑADE ESTO JUSTO AQUÍ
