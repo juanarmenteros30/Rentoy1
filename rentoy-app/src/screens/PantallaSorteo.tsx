@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, Animated } from 'react-native'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import CartaComp from '../components/Carta'
 
 const PALO_SIMBOLO = {
@@ -33,27 +33,42 @@ export default function PantallaSorteo({
   const jugadorConPalo = palosJugadores.indexOf(cartaSorteo.palo)
 
   // 🎬 ANIMACIONES
-  const animCarta = useRef(new Animated.Value(0)).current
-  const animGlow = useRef(new Animated.Value(0)).current
-  
+  const scale = useRef(new Animated.Value(0.6)).current
+  const opacity = useRef(new Animated.Value(0)).current
+  const glow = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    // carta aparece
-    Animated.timing(animCarta, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true
-    }).start(() => {
-      // glow ganador
+    // entrada carta (rebote)
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 5,
+        tension: 80,
+        useNativeDriver: true
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+
+      // glow suave continuo
       Animated.loop(
         Animated.sequence([
-          Animated.timing(animGlow, { toValue: 1, duration: 700, useNativeDriver: false }),
-          Animated.timing(animGlow, { toValue: 0, duration: 700, useNativeDriver: false })
+          Animated.timing(glow, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: false
+          }),
+          Animated.timing(glow, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: false
+          })
         ])
       ).start()
 
-      // mostrar resultado
-     
     })
   }, [])
 
@@ -69,9 +84,12 @@ export default function PantallaSorteo({
   const fondoJugador = (index: number) => {
     if (jugadorConPalo === index) {
       return {
-        backgroundColor: animGlow.interpolate({
+        backgroundColor: glow.interpolate({
           inputRange: [0, 1],
-          outputRange: ['rgba(212,175,55,0.25)', 'rgba(212,175,55,0.45)']
+          outputRange: [
+            'rgba(212,175,55,0.25)',
+            'rgba(212,175,55,0.5)'
+          ]
         }),
         borderWidth: 2,
         borderColor: '#d4af37'
@@ -104,7 +122,7 @@ export default function PantallaSorteo({
           borderColor: '#d4af37'
         }}/>
 
-        {/* carta animada */}
+        {/* carta animada PRO */}
         <Animated.View style={{
           position: 'absolute',
           top: '50%',
@@ -112,9 +130,9 @@ export default function PantallaSorteo({
           transform: [
             { translateX: -40 },
             { translateY: -70 },
-            { scale: animCarta }
+            { scale }
           ],
-          opacity: animCarta
+          opacity
         }}>
           <CartaComp carta={cartaSorteo} tamaño="grande" />
         </Animated.View>
@@ -195,25 +213,25 @@ export default function PantallaSorteo({
 
       </View>
 
-      {/* RESULTADO  */}
-     <Text style={{
-  color: '#d4af37',
-  marginTop: 25,
-  fontWeight: 'bold',
-  fontSize: 20
-}}>
-  🏆 Empieza {NOMBRE_JUGADOR[jugadorInicio]}
-</Text>
+      {/* RESULTADO */}
+      <Text style={{
+        color: '#d4af37',
+        marginTop: 25,
+        fontWeight: 'bold',
+        fontSize: 20
+      }}>
+        🏆 Empieza {NOMBRE_JUGADOR[jugadorInicio]}
+      </Text>
 
-<Text style={{
-  color: '#fff',
-  fontSize: 13,
-  opacity: 0.7,
-  marginTop: 6,
-  textAlign: 'center'
-}}>
-  El ganador reparte. Empieza el siguiente jugador.
-</Text>
+      <Text style={{
+        color: '#fff',
+        fontSize: 13,
+        opacity: 0.7,
+        marginTop: 6,
+        textAlign: 'center'
+      }}>
+        El ganador reparte. Empieza el siguiente jugador.
+      </Text>
 
       {/* LEYENDA */}
       <View style={{ marginTop: 10, opacity: 0.6 }}>
