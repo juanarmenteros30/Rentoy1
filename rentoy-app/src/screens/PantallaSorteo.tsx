@@ -220,7 +220,7 @@ export default function PantallaSorteo({
         fontWeight: 'bold',
         fontSize: 20
       }}>
-        🏆 HA GANADO {NOMBRE_JUGADOR[jugadorConPalo]}
+        🏆 Empieza {NOMBRE_JUGADOR[jugadorInicio]}
       </Text>
 
       <Text style={{

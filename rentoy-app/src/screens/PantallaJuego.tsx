@@ -77,8 +77,6 @@ function NombreActivo({
 }
 
 
-
-
 const C = {
   mesa: '#1a6b3c',
   mesaDark: '#145530',
@@ -274,8 +272,6 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
   const partida    = partidaRef.current
 
   const [mostrarSorteo, setMostrarSorteo] = useState(true)
-  const animPantalla = useRef(new Animated.Value(1)).current
-  const [mesaLista, setMesaLista] = useState(false)
   const [tick,         setTick]          = useState(0)
   const [log,          setLog]           = useState<string[]>([])
   const [pensandoJ,    setPensandoJ]     = useState<number | null>(null)
@@ -363,19 +359,10 @@ function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVol
   }, [refrescar])
 
   useEffect(() => {
-    
-    if (!mesaLista) return
-
     if (!partida.esTurnoHumano && !partida.terminada && !procesandoRef.current) {
       timerRef.current = setTimeout(avanzarIA, 400)
     }
-  }, [tick,mesaLista])
-
-useEffect(() => {
-  if (!mostrarSorteo) {
-    setTimeout(() => setMesaLista(true), 700) // tiempo para que el usuario vea la mesa
-  }
-}, [mostrarSorteo])
+  }, [tick])
 
   useEffect(() => () => {
     if (timerRef.current)   clearTimeout(timerRef.current)
@@ -415,35 +402,12 @@ useEffect(() => {
     } catch (_) {}
   }
 
-if (mostrarSorteo && estado.cartaSorteo) {
+  if (mostrarSorteo && estado.cartaSorteo) {
+    return <PantallaSorteo palosJugadores={estado.palosJugadores} cartaSorteo={estado.cartaSorteo} jugadorInicio={estado.jugadorInicioPartida} onContinuar={() => { setMostrarSorteo(false); setTimeout(avanzarIA, 400) }} />
+  }
+
   return (
-    <Animated.View style={{ flex: 1, opacity: animPantalla }}>
-      <PantallaSorteo
-        palosJugadores={estado.palosJugadores}
-        cartaSorteo={estado.cartaSorteo}
-        jugadorInicio={estado.jugadorInicioPartida}
-        onContinuar={() => {
-          Animated.timing(animPantalla, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true
-          }).start(() => {
-            setMostrarSorteo(false)
-
-            Animated.timing(animPantalla, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true
-            }).start()
-          })
-        }}
-      />
-    </Animated.View>
-  )
-}
-
-   return (
-  <Animated.View style={[estilos.juego, { opacity: animPantalla }]}>
+    <View style={estilos.juego}>
       <StatusBar barStyle="light-content" backgroundColor={C.mesa} />
 
       <View style={estilos.marcadorTV}>
@@ -596,7 +560,7 @@ if (mostrarSorteo && estado.cartaSorteo) {
           </View>
         </View>
       ) : null}
-    </Animated.View>
+    </View>
   )
 }
 
