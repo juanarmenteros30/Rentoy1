@@ -1,5 +1,4 @@
-import { useRef, useEffect } from 'react'
-import { View, Text, TouchableOpacity, Animated, Image, useWindowDimensions } from 'react-native'
+import { View, Text, TouchableOpacity, Image, useWindowDimensions } from 'react-native'
 import { Carta } from '../../game/engine'
 
 // ⚠️ IMPORTANTE: copia también estos mapas
@@ -10,7 +9,7 @@ const CARTA_DORSO = require('../../assets/dorso.png')
 
 // 👉 IMPORTANTE: también copia tu CARTA_IMAGEN aquí
 const CARTA_IMAGEN: Record<string, any> = {
-  
+
   // OROS
   '1_oros': require('../../assets/Aoro.png'),
   '2_oros': require('../../assets/2oro.png'),
@@ -62,7 +61,7 @@ const CARTA_IMAGEN: Record<string, any> = {
 }
 
 export default function CartaComp({
-  carta, seleccionable, onPress, tamaño = 'normal', boca = true, destacada = false, ganadora = false
+  carta, seleccionable, onPress, tamaño = 'normal', boca = true, destacada = false, ganadora = false, ilegal = false
 }: {
   carta: Carta | null
   seleccionable?: boolean
@@ -71,20 +70,10 @@ export default function CartaComp({
   boca?: boolean
   destacada?: boolean
   ganadora?: boolean
+  ilegal?: boolean
 }) {
-  const anim    = useRef(new Animated.Value(1)).current
-  const slideIn = useRef(new Animated.Value(0)).current
   const { width, height } = useWindowDimensions()
   const esMovil = width < 768 || height < 850
-
-  useEffect(() => {
-    if (destacada) {
-      Animated.sequence([
-        Animated.timing(slideIn, { toValue: -8, duration: 120, useNativeDriver: false }),
-        Animated.spring(slideIn,  { toValue: 0,  useNativeDriver: false }),
-      ]).start()
-    }
-  }, [destacada])
 
   const w = tamaño === 'mini' ? (esMovil ? 40 : 52) : tamaño === 'grande' ? (esMovil ? 80 : 100) : (esMovil ? 60 : 70)
   const h = tamaño === 'mini' ? (esMovil ? 60 : 80) : tamaño === 'grande' ? (esMovil ? 110 : 140) : (esMovil ? 85 : 100)
@@ -103,15 +92,23 @@ export default function CartaComp({
 
   const imagenCarta = CARTA_IMAGEN[carta.id]
 
-  if (imagenCarta) {
-    return (
-      <TouchableOpacity onPress={onPress} disabled={!seleccionable}>
-        <Animated.View style={{ width: w, height: h }}>
-          <Image source={imagenCarta} style={{ width: '100%', height: '100%', borderRadius: 7 }} />
-        </Animated.View>
-      </TouchableOpacity>
-    )
-  }
+ if (imagenCarta) {
+  const esLegal = !ilegal
+  return (
+    <TouchableOpacity onPress={onPress} disabled={!seleccionable}>
+      <View
+        style={{
+          width: w,
+          height: h,
+          opacity: ilegal ? 0.65 : 1,
+          transform: [{ translateY: (seleccionable && esLegal) ? -10 : 0 }],
+        }}
+      >
+        <Image source={imagenCarta} style={{ width: '100%', height: '100%', borderRadius: 7 }} />
+      </View>
+    </TouchableOpacity>
+  )
+}
 
   const color   = PALO_COLOR[carta.palo]
   const simbolo = PALO_SIMBOLO[carta.palo]

@@ -5,13 +5,14 @@ import {
 } from 'react-native'
 
 import { PartidaSinglePlayer } from '../game/partida'
-import { ACCION, NOMBRES, fuerzaCarta } from '../game/engine'
+
 
 // 👇 OJO rutas nuevas
 import CartaComp from '../components/Carta'
 import { Dificultad } from '../game/partida'
-import { Accion } from '../game/engine'
 import PantallaSorteo from './PantallaSorteo'
+
+import { ACCION, NOMBRES, fuerzaCarta, cartasLegalesEnBaza } from '../game/engine'
 
 
 function NombreActivo({
@@ -264,14 +265,18 @@ const SENA_TEXTO = {
   reina:'Reina', rey:'Rey', dos_vira:'2 Vira', farol:'Farol',
 }
 
-const DELAY_IA = 1300
+const DELAY_IA = 600
 
 
 
 
 function PantallaJuego({ dificultad, onVolver }: { dificultad: Dificultad; onVolver: () => void }) {
-  const partidaRef = useRef(new PartidaSinglePlayer(dificultad))
-  const partida    = partidaRef.current
+  const partidaRef = useRef<PartidaSinglePlayer | null>(null);
+if (partidaRef.current === null) {
+  partidaRef.current = new PartidaSinglePlayer(dificultad);
+}
+  const partida = partidaRef.current; // o usar partidaRef.current directamente donde se use
+ 
 
   const [mostrarSorteo, setMostrarSorteo] = useState(true)
   const animPantalla = useRef(new Animated.Value(1)).current
@@ -441,6 +446,9 @@ if (mostrarSorteo && estado.cartaSorteo) {
     </Animated.View>
   )
 }
+const cartaInicialBaza  = estado.cartasMesa[estado.jugadorInicioBaza]
+const cartasLegalesMano = cartasLegalesEnBaza(estado.manos[0], cartaInicialBaza, estado.vira.palo)
+const idsLegales        = new Set(cartasLegalesMano.map(c => c.id))
 
    return (
   <Animated.View style={[estilos.juego, { opacity: animPantalla }]}>
@@ -560,14 +568,21 @@ if (mostrarSorteo && estado.cartaSorteo) {
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-              {estado.manos[0].map((carta, index) => {
-                const jugable = cartasJugables.includes(carta.id) && !bloqueado
-                return (
-                  <View key={carta.id} style={{ marginLeft: index > 0 ? (esMovil ? -20 : -30) : 0 }}>
-                    <CartaComp carta={carta} seleccionable={jugable} onPress={() => jugable && jugar(carta.id)} tamaño="grande" />
-                  </View>
-                )
-              })}
+{estado.manos[0].map((carta, index) => {
+  const jugable  = !bloqueado && partida.esTurnoHumano && !estado.esperandoEnvio
+  const esIlegal = !idsLegales.has(carta.id)
+  return (
+    <View key={carta.id} style={{ marginLeft: index > 0 ? (esMovil ? -20 : -30) : 0 }}>
+      <CartaComp
+        carta={carta}
+        seleccionable={jugable}
+        onPress={() => jugable && jugar(carta.id)}
+        tamaño="grande"
+        ilegal={esIlegal}
+      />
+    </View>
+  )
+})}
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
