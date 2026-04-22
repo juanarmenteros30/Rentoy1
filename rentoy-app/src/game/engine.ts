@@ -126,6 +126,11 @@ export interface EstadoJuego {
   ganador:               0 | 1 | -1
   mazoRestante: Carta[]
   soloFase3: boolean
+  renuncioPendiente: {
+  jugador: number
+  cartaTirada: Carta
+  puntos: number
+} | null
 }
 
 export function equipo(j: number): 0 | 1 { return (j % 2) as 0 | 1 }
@@ -163,6 +168,10 @@ export function clonarEstado(e: EstadoJuego): EstadoJuego {
     terminada:             e.terminada,
     ganador:               e.ganador,
     mazoRestante: [...e.mazoRestante],
+    renuncioPendiente: e.renuncioPendiente
+      ? { ...e.renuncioPendiente, cartaTirada: { ...e.renuncioPendiente.cartaTirada } }
+      : null,
+  
   }
 }
 
@@ -228,6 +237,7 @@ export function crearEstadoInicial(): EstadoJuego {
   terminada: false,
   ganador: -1,
   soloFase3: false,
+  renuncioPendiente: null,
 }
 
   repartirFase(estado)
@@ -353,14 +363,16 @@ estado.puntos[equipo(estado.jugadorPidioEnvio)] += puntosGanados
   estado.cartasJugadas.push(carta)
 
   if (esRenuncio) {
-    const puntosRenuncio  = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 30)
-    const equipoContrario = (1 - equipo(jugador)) as 0 | 1
-    estado.puntos[equipoContrario] += puntosRenuncio
-    _comprobarFin(estado)
-    if (!estado.terminada) _nuevaFase(estado)
+    const puntosRenuncio = estado.valorMano === 1 ? 3 : Math.min(estado.valorMano + 3, 30)
+    estado.renuncioPendiente = {
+      jugador,
+      cartaTirada: carta,
+      puntos: puntosRenuncio,
+    }
+    estado.jugadorActual = -1   // bloquea turno mientras se muestra el banner
+    estado.turno         = -1
     return
   }
-
   const todosJugaron = estado.cartasMesa.every(c => c !== null)
   if (todosJugaron) {
     _resolverBaza(estado)
@@ -516,4 +528,14 @@ export function confirmarBaza(estado: EstadoJuego, _ignorado: number): void {
 
 export function evaluarMano(mano: Carta[], viraPalo: Palo): number {
   return mano.reduce((s, c) => s + fuerzaCarta(c, viraPalo), 0)
+}
+
+export function confirmarRenuncio(estado: EstadoJuego): void {
+  if (!estado.renuncioPendiente) return
+  const { jugador, puntos } = estado.renuncioPendiente
+  const equipoContrario = (1 - equipo(jugador)) as 0 | 1
+  estado.puntos[equipoContrario] += puntos
+  estado.renuncioPendiente = null
+  _comprobarFin(estado)
+  if (!estado.terminada) _nuevaFase(estado)
 }

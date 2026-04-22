@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 
 import { PartidaSinglePlayer } from '../game/partida'
-
+import { ACCION, NOMBRES, fuerzaCarta, cartasLegalesEnBaza, confirmarRenuncio } from '../game/engine'
 
 // 👇 OJO rutas nuevas
 import CartaComp from '../components/Carta'
@@ -337,7 +337,7 @@ if (partidaRef.current === null) {
       const esHumano  = partida.esTurnoHumano
       const terminada = partida.terminada
 
-      if (terminada || esHumano || estado.jugadorActual === 0) {
+      if (terminada || esHumano || estado.jugadorActual === 0 || estado.renuncioPendiente) {
         setPensandoJ(null)
         procesandoRef.current = false
         refrescar()
@@ -370,7 +370,7 @@ if (partidaRef.current === null) {
   useEffect(() => {
     
     if (!mesaLista) return
-
+    if (partida.estado.renuncioPendiente) return 
     if (!partida.esTurnoHumano && !partida.terminada && !procesandoRef.current) {
       timerRef.current = setTimeout(avanzarIA, 400)
     }
@@ -381,6 +381,15 @@ useEffect(() => {
     setTimeout(() => setMesaLista(true), 700) // tiempo para que el usuario vea la mesa
   }
 }, [mostrarSorteo])
+
+useEffect(() => {
+  if (!partida.estado.renuncioPendiente) return
+  const t = setTimeout(() => {
+    confirmarRenuncio(partida.estado)
+    refrescar()
+  }, 1800)
+  return () => clearTimeout(t)
+}, [tick])
 
   useEffect(() => () => {
     if (timerRef.current)   clearTimeout(timerRef.current)
@@ -415,8 +424,9 @@ useEffect(() => {
     if (bloqueado) return
     try {
       partida.jugarHumano(accion)
-      refrescar()
+      refrescar()if (!partida.estado.renuncioPendiente) {
       setTimeout(avanzarIA, 300)
+    }
     } catch (_) {}
   }
 
@@ -595,6 +605,38 @@ const idsLegales        = new Set(cartasLegalesMano.map(c => c.id))
         </View>
       </View>
 
+      
+      {estado.renuncioPendiente ? (
+  <View style={{
+    position: 'absolute',
+    top: '42%',
+    alignSelf: 'center',
+    backgroundColor: '#b00020',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fff',
+    zIndex: 90,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  }}>
+    <Text style={{ color: '#fff', fontWeight: '900', fontSize: 20, textAlign: 'center', letterSpacing: 1 }}>
+      ¡RENUNCIO!
+    </Text>
+    <Text style={{ color: '#fff', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
+      {NOMBRE_JUGADOR[estado.renuncioPendiente.jugador]} arrastró mal
+    </Text>
+    <Text style={{ color: '#ffd700', fontSize: 15, fontWeight: '800', textAlign: 'center', marginTop: 4 }}>
+      +{estado.renuncioPendiente.puntos} para {estado.renuncioPendiente.jugador % 2 === 0 ? 'ellos' : 'nosotros'}
+    </Text>
+  </View>
+) : null}
+      
+      
       {ganadorModal ? (
         <View style={estilos.modal}>
           <View style={estilos.modalCaja}>
