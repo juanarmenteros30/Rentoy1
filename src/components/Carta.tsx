@@ -110,14 +110,28 @@ export default function CartaComp({
     }
   }, [destacada])
 
-  // Casos tempranos: sin carta
+// Casos tempranos: sin carta
   if (!carta && boca) return <View style={{ width: w, height: h, margin: 3 }} />
 
-  // Dorso
+  // Dorso — mismas dimensiones que el frente para que no haya saltos al revelar
   if (!boca) {
     return (
-      <View style={{ width: w, height: h, margin: 3 }}>
-        <Image source={CARTA_DORSO} style={{ width: '100%', height: '100%', borderRadius: 7 }} />
+      <View
+        style={{
+          width: w,
+          height: h,
+          margin: 3,
+          borderRadius: 9,
+          borderWidth: 3,
+          borderColor: 'transparent',
+          backgroundColor: 'transparent',
+        }}
+      >
+        <Image
+          source={CARTA_DORSO}
+          style={{ width: '100%', height: '100%', borderRadius: 6 }}
+          resizeMode="cover"
+        />
       </View>
     )
   }
@@ -126,14 +140,13 @@ export default function CartaComp({
 
   const imagenCarta = CARTA_IMAGEN[carta.id]
 
-  // Estilos de borde según estado
+  // Borde SIEMPRE de 3px — transparente cuando no hay estado especial.
   const borderStyle = ganadora
     ? { borderColor: '#00e676', borderWidth: 3 }
     : destacada
-    ? { borderColor: '#f5c945', borderWidth: 2.5 }
-    : { borderColor: 'transparent', borderWidth: 0 }
+    ? { borderColor: '#f5c945', borderWidth: 3 }
+    : { borderColor: 'transparent', borderWidth: 3 }
 
-  // Sombra para ganadora (se nota sobre la mesa verde)
   const ganadoraShadow = ganadora
     ? {
         shadowColor: '#00e676',
@@ -144,7 +157,6 @@ export default function CartaComp({
       }
     : {}
 
-  // Glow animado de destacada
   const destacadaGlow = {
     shadowColor: '#f5c945',
     shadowOpacity: animDestacada,
@@ -161,8 +173,10 @@ export default function CartaComp({
         {
           width: w,
           height: h,
+          margin: 3,
           borderRadius: 9,
           opacity: ilegal ? 0.65 : 1,
+          backgroundColor: 'transparent',
           transform: [
             { translateY },
             { scale: ganadora ? animGanadora : 1 },
@@ -174,20 +188,24 @@ export default function CartaComp({
       ]}
     >
       {imagenCarta ? (
-        <Image source={imagenCarta} style={{ width: '100%', height: '100%', borderRadius: 7 }} />
+        <Image
+          source={imagenCarta}
+          style={{ width: '100%', height: '100%', borderRadius: 6 }}
+          resizeMode="cover"
+        />
       ) : (
         <View style={{ flex: 1 }} />
       )}
     </Animated.View>
   )
 
-  if (seleccionable || onPress || onLongPress) {
+  // 👇 LO QUE FALTABA: devolver el JSX, envuelto en TouchableOpacity si es interactivo
+  if (onPress || onLongPress) {
     return (
       <TouchableOpacity
         onPress={onPress}
         onLongPress={onLongPress}
-        delayLongPress={600}
-        disabled={!seleccionable}
+        disabled={ilegal || (!seleccionable && !onLongPress)}
         activeOpacity={0.85}
       >
         {inner}

@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, Platform, StatusBar, useWindowDimensions
+  Animated, Easing, Platform, StatusBar, useWindowDimensions
 } from 'react-native'
 
 import { PartidaSinglePlayer } from '../game/partida'
-import { ACCION, NOMBRES, fuerzaCarta, cartasLegalesEnBaza, confirmarRenuncio, continuarBaza } from '../game/engine'
-
+import { ACCION, NOMBRES, fuerzaCarta, cartasLegalesEnBaza, confirmarRenuncio, continuarBaza, type Accion } from '../game/engine'
 // 👇 OJO rutas nuevas
 import CartaComp from '../components/Carta'
+import CartaFlip from '../components/CartaFlip'
 import { Dificultad } from '../game/partida'
 import PantallaSorteo from './PantallaSorteo'
 
@@ -244,9 +244,19 @@ filaCentral: {
 
   jugadorLado:  { width: 80, alignItems: 'center', gap: 4, justifyContent: 'center', height: '100%' },
   jNombreLado:  { fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  manoRivalContainer: { alignItems: 'center', justifyContent: 'center' },
+manoRivalContainer: { 
+  alignItems: 'center', 
+  justifyContent: 'flex-start',
+  minHeight: 180,   // espacio fijo para 3 cartas, no se contrae
+},
+
+mesaFila: { 
+  flexDirection: 'row', 
+  justifyContent: 'center', 
+  alignItems: 'center',
+  height: 90,   // 80 de carta + 5 margen arriba/abajo
+},
   mesaCentro:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  mesaFila:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   hueco:        { margin: 3, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', borderStyle: 'dashed' },
   btn:    { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 9, alignItems: 'center', minWidth: 80, elevation: 4 },
   btnTxt: { color: C.blanco, fontSize: 13, fontWeight: '700' },
@@ -291,7 +301,20 @@ if (partidaRef.current === null) {
 
   const [mostrarSorteo, setMostrarSorteo] = useState(true)
   const animPantalla = useRef(new Animated.Value(1)).current
+  
+
+const [repartiendo, setRepartiendo] = useState(false)
+const [cartasRepartiendo, setCartasRepartiendo] = useState<Array<{
+  key: string
+  jugador: number
+  anim: Animated.Value
+  esVira?: boolean
+  indice?: number
+  total?: number
+}>>([])
+
   const [mesaLista, setMesaLista] = useState(false)
+  const [viraRevelada, setViraRevelada] = useState(false)
   const [tick,         setTick]          = useState(0)
   const [log,          setLog]           = useState<string[]>([])
   const [pensandoJ,    setPensandoJ]     = useState<number | null>(null)
@@ -300,8 +323,26 @@ if (partidaRef.current === null) {
   const procesandoRef = useRef(false)
   const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timerIARef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+const [posManos, setPosManos] = useState<Record<number, { x: number; y: number; width: number; height: number }>>({})
+
+const refMano0 = useRef<View>(null)
+const refMano1 = useRef<View>(null)
+const refMano2 = useRef<View>(null)
+const refMano3 = useRef<View>(null)
+
+const repartiendoRef = useRef(false)
+useEffect(() => { repartiendoRef.current = repartiendo }, [repartiendo])
+
+  const faseAnterior = useRef<number>(0)
+
 
   const { width, height } = useWindowDimensions()
+  const MAZO_ANCHO = 56
+const posicionMazo = {
+  left: width - MAZO_ANCHO - 16,  // pegado al borde derecho, 16px de margen
+  top: 95,                         // debajo del marcador y el botón X
+}
+  
   const esMovil = width < 768 || height < 850
 
   const refrescar = useCallback(() => setTick(t => t + 1), [])
@@ -339,55 +380,69 @@ if (partidaRef.current === null) {
     }
   }, [])
 
-  const avanzarIA = useCallback(() => {
-    if (procesandoRef.current) return
-    procesandoRef.current = true
+ const avanzarIA = useCallback(() => {
+  if (procesandoRef.current) return
+  procesandoRef.current = true
 
-    const paso = () => {
-      const estado    = partida.estado
-      const esHumano  = partida.esTurnoHumano
-      const terminada = partida.terminada
+  const liberar = (motivo: string) => {
+    console.log('[IA] liberada:', motivo)
+    setPensandoJ(null)
+    procesandoRef.current = false
+    refrescar()
+  }
 
-      if (terminada || esHumano || estado.jugadorActual === 0 || estado.bazaCompleta || estado.renuncioPendiente) {
-        setPensandoJ(null)
-        procesandoRef.current = false
-        refrescar()
-        return
+  const paso = () => {
+    const estado    = partida.estado
+    const esHumano  = partida.esTurnoHumano
+    const terminada = partida.terminada
+
+    if (terminada)                      return liberar('partida terminada')
+    if (esHumano)                       return liberar('turno humano')
+    if (estado.jugadorActual === 0)     return liberar('jugadorActual=0')
+    if (estado.bazaCompleta)            return liberar('bazaCompleta')
+    if (estado.renuncioPendiente)       return liberar('renuncioPendiente')
+    if (repartiendoRef.current)         return liberar('repartiendo')
+
+    const jugadorSiguiente = estado.jugadorActual
+    setPensandoJ(jugadorSiguiente)
+    refrescar()
+
+    timerIARef.current = setTimeout(() => {
+      let avanzo = false
+      try {
+        avanzo = partida.avanzarUnPasoIA()
+      } catch (err) {
+        console.error('[IA] avanzarUnPasoIA falló:', err)
+        return liberar('error en avanzarUnPasoIA')
       }
-
-      const jugadorSiguiente = estado.jugadorActual
-      setPensandoJ(jugadorSiguiente)
+      setPensandoJ(null)
       refrescar()
 
-      timerIARef.current = setTimeout(() => {
-        const avanzo = partida.avanzarUnPasoIA()
-        setPensandoJ(null)
-        refrescar()
+      if (avanzo && !partida.terminada && !partida.esTurnoHumano) {
+        timerIARef.current = setTimeout(paso, DELAY_IA)
+      } else {
+        timerIARef.current = setTimeout(() => liberar('fin de cadena'), DELAY_IA * 1.5)
+      }
+    }, DELAY_IA)
+  }
 
-        if (avanzo && !partida.terminada && !partida.esTurnoHumano) {
-          timerIARef.current = setTimeout(paso, DELAY_IA)
-        } else {
-          timerIARef.current = setTimeout(() => {
-            procesandoRef.current = false
-            refrescar()
-          }, DELAY_IA * 1.5)
-        }
-      }, DELAY_IA)
+  paso()
+}, [refrescar])
+useEffect(() => {
+  if (!mesaLista) return
+  if (repartiendo) return
+  if (partida.estado.renuncioPendiente) return 
+  if (partida.estado.bazaCompleta) return 
+  if (!partida.esTurnoHumano && !partida.terminada && !procesandoRef.current) {
+    timerRef.current = setTimeout(avanzarIA, 400)
+  }
+  return () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
     }
-
-    paso()
-  }, [refrescar])
-
-  useEffect(() => {
-
-
-    if (!mesaLista) return
-    if (partida.estado.renuncioPendiente) return 
-    if (partida.estado.bazaCompleta) return 
-    if (!partida.esTurnoHumano && !partida.terminada && !procesandoRef.current) {
-      timerRef.current = setTimeout(avanzarIA, 400)
-    }
-  }, [tick,mesaLista])
+  }
+}, [tick, mesaLista, repartiendo])
 
 useEffect(() => {
   if (!mostrarSorteo) {
@@ -395,26 +450,136 @@ useEffect(() => {
   }
 }, [mostrarSorteo])
 
+
+const renuncioActivo = !!partida.estado.renuncioPendiente
 useEffect(() => {
-  if (!partida.estado.renuncioPendiente) return
+  if (!renuncioActivo) return
   const t = setTimeout(() => {
     confirmarRenuncio(partida.estado)
     refrescar()
   }, 1800)
   return () => clearTimeout(t)
+}, [renuncioActivo])
+
+
+
+
+const bazaCompletaActiva = partida.estado.bazaCompleta
+useEffect(() => {
+  if (!bazaCompletaActiva) return
+  const t = setTimeout(() => {
+    console.log('[BAZA] continuarBaza ANTES — fase:', partida.estado.fase, 'bazasGanadas:', partida.estado.bazasGanadas, 'jugadorActual:', partida.estado.jugadorActual)
+    continuarBaza(partida.estado)
+    console.log('[BAZA] continuarBaza DESPUÉS — fase:', partida.estado.fase, 'bazaCompleta:', partida.estado.bazaCompleta, 'jugadorActual:', partida.estado.jugadorActual, 'esTurnoHumano:', partida.esTurnoHumano)
+    refrescar()
+  }, 2600)
+  return () => clearTimeout(t)
+}, [bazaCompletaActiva])
+
+
+// Watchdog: si la IA queda procesando >5s sin hacer nada, fuerza reset
+useEffect(() => {
+  if (!procesandoRef.current) return
+  const t = setTimeout(() => {
+    if (procesandoRef.current) {
+      console.warn('[IA] watchdog: procesandoRef colgado, reseteando')
+      procesandoRef.current = false
+      setPensandoJ(null)
+      refrescar()
+    }
+  }, 5000)
+  return () => clearTimeout(t)
 }, [tick])
 
+// Medir posición real de cada mano para que el reparto aterrice exacto
+useEffect(() => {
+  const id = setTimeout(() => {
+    const refs = [refMano0, refMano1, refMano2, refMano3]
+    refs.forEach((r, i) => {
+      r.current?.measureInWindow?.((x, y, w, h) => {
+        setPosManos(p => ({ ...p, [i]: { x, y, width: w, height: h } }))
+      })
+    })
+  }, 100)
+  return () => clearTimeout(id)
+}, [tick, mesaLista, mostrarSorteo, repartiendo])
 
 useEffect(() => {
-  if (!partida.estado.bazaCompleta) return
-  const t = setTimeout(() => {
-    continuarBaza(partida.estado)
-    refrescar()
-  }, 1500)
-  return () => {
-    clearTimeout(t)
+  if (!mesaLista || mostrarSorteo) return
+
+  const faseActual = partida.estado.fase
+  const fasePrev = faseAnterior.current
+
+  // Detectamos transición de fase (nueva ronda): prev era 0 (inicio) o cambió de número
+  const cambioDeFase = faseActual !== fasePrev
+  if (!cambioDeFase) return
+
+  faseAnterior.current = faseActual
+
+  // Cuántas cartas le toca a cada jugador en esta fase
+  const cartasPorJugador = faseActual // 1, 2 o 3
+
+  const primeroEnJugar = partida.estado.jugadorInicioRonda ?? 0
+const orden = [
+  primeroEnJugar,                  // 1ª carta = el que juega primero
+  (primeroEnJugar + 3) % 4,        // su derecha
+  (primeroEnJugar + 2) % 4,        // frente
+  (primeroEnJugar + 1) % 4,        // izquierda = el que reparte (última carta)
+]
+
+  const nuevas: Array<{ key: string; jugador: number; anim: Animated.Value; esVira?: boolean }> = []
+  let idx = 0
+  for (const j of orden) {
+  for (let k = 0; k < cartasPorJugador; k++) {
+    nuevas.push({
+      key: `rep-${Date.now()}-${idx++}`,
+      jugador: j,
+      indice: k,
+      total: cartasPorJugador,
+      anim: new Animated.Value(0),
+    })
   }
-}, [tick])
+}
+
+ // Vira como última carta SOLO en R1
+  if (faseActual === 1) {
+    nuevas.push({
+      key: `rep-vira-${Date.now()}`,
+      jugador: -1,
+      anim: new Animated.Value(0),
+      esVira: true,
+    })
+    setViraRevelada(false)   // 👈 vira aterriza boca abajo
+  }
+
+  setCartasRepartiendo(nuevas)
+  setRepartiendo(true)
+
+  const DELAY_CARTA = 180
+const DUR_VUELO = 520
+nuevas.forEach((c, i) => {
+  Animated.sequence([
+    Animated.delay(i * DELAY_CARTA),
+    Animated.timing(c.anim, {
+      toValue: 1,
+      duration: DUR_VUELO,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }),
+  ]).start()
+})
+
+  const totalMs = nuevas.length * DELAY_CARTA + DUR_VUELO + 200
+  setTimeout(() => {
+    setRepartiendo(false)
+    setCartasRepartiendo([])
+    // En fase 1, espera un instante a que aparezca la vira y luego haz el flip
+    if (faseActual === 1) {
+      setTimeout(() => setViraRevelada(true), 250)
+    }
+  }, totalMs)
+}, [tick, mesaLista, mostrarSorteo])
+
 
   useEffect(() => () => {
     if (timerRef.current)   clearTimeout(timerRef.current)
@@ -422,28 +587,82 @@ useEffect(() => {
   }, [])
 
   const estado         = partida.estado
+
+
+const destinoJugador = (jugador: number, indice: number = 0, total: number = 1) => {
+  const m = posManos[jugador]
+  // Si aún no se ha medido, fallback razonable (evita teletransporte al 0,0)
+  if (!m) {
+    const fallbacks: Record<number, { x: number; y: number }> = {
+      0: { x: width / 2 - 28,   y: height - 130 },
+      1: { x: 28,               y: height * 0.50 },
+      2: { x: width / 2 - 28,   y: 100 },
+      3: { x: width - 84,       y: height * 0.50 },
+    }
+    const f = fallbacks[jugador]
+    return { x: f.x - posicionMazo.left, y: f.y - posicionMazo.top }
+  }
+
+  const horizontal = jugador === 0 || jugador === 2
+  const cardW = jugador === 0 ? (esMovil ? 80 : 100) : (esMovil ? 40 : 52)
+  const cardH = jugador === 0 ? (esMovil ? 110 : 140) : (esMovil ? 60 : 80)
+  // 👇 CartaComp añade margin:3 a su View externa, así que el "slot" real es +6 en cada eje
+  const slotW = cardW + 6
+  const slotH = cardH + 6
+  const overlap = horizontal ? (esMovil ? 20 : 30) : (esMovil ? 30 : 45)
+  const STEP = horizontal ? (slotW - overlap) : (slotH - overlap)
+  const fanSize = (total - 1) * STEP + (horizontal ? slotW : slotH)
+
+  let originX = m.x
+  let originY = m.y
+  if (horizontal) {
+    originX = m.x + m.width / 2 - fanSize / 2
+  } else {
+    originY = m.y + (jugador === 1 || jugador === 3 ? (esMovil ? 10 : 20) : 0)
+    originX = m.x + (m.width - slotW) / 2
+  }
+
+  const destX = horizontal ? originX + indice * STEP : originX
+  const destY = horizontal ? originY : originY + indice * STEP
+
+  return {
+    x: destX - posicionMazo.left,
+    y: destY - posicionMazo.top,
+  }
+}
+const destinoVira = () => {
+  const cardW = esMovil ? 60 : 70   // tamaño "normal"
+  const cardH = esMovil ? 85 : 100
+  const d = { left: width / 2 - cardW / 2, top: height / 2 - cardH / 2 }
+  return {
+    x: d.left - posicionMazo.left,
+    y: d.top - posicionMazo.top,
+  }
+}
+
+
   const accionesHumano = partida.accionesHumano
   const cartasJugables = accionesHumano.filter(a => !Object.values(ACCION).includes(a as any))
   const puedeEnvio     = accionesHumano.includes(ACCION.ENVIO)
   const puedeQuiero    = accionesHumano.includes(ACCION.QUIERO)
   const puedeMeVoy     = accionesHumano.includes(ACCION.ME_VOY)
   const puedeFarol     = accionesHumano.includes(ACCION.FAROL)
-  const bloqueado      = pensandoJ !== null || (!partida.esTurnoHumano && !partida.terminada)
-
-  const viraPalo = estado.vira.palo
-  let idGanadora: string | null = null
-  if (estado.cartasMesa.some(c => c !== null)) {
-    const subviraPalo = estado.cartasMesa[estado.jugadorInicioBaza]?.palo || estado.cartasMesa.find(c => c !== null)!.palo
-    const hayVira = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
-    const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
-    let maxF = -1
-    for (let j = 0; j < 4; j++) {
-      const c = estado.cartasMesa[j]
-      if (!c) continue
-      const f = hayVira ? fuerzaCarta(c, viraPalo) : (c.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(c.valor))
-      if (f > maxF) { maxF = f; idGanadora = c.id }
-    }
+const bloqueado      = pensandoJ !== null || repartiendo || (!partida.esTurnoHumano && !partida.terminada)
+ const viraPalo = estado.vira.palo
+let idGanadora: string | null = null
+let jugadorGanador: number | null = null
+if (estado.cartasMesa.some(c => c !== null)) {
+  const subviraPalo = estado.cartasMesa[estado.jugadorInicioBaza]?.palo || estado.cartasMesa.find(c => c !== null)!.palo
+  const hayVira = estado.cartasMesa.some(c => c !== null && c.palo === viraPalo)
+  const ORDEN_SUBVIRA = [2, 3, 4, 5, 6, 7, 1, 10, 11, 12]
+  let maxF = -1
+  for (let j = 0; j < 4; j++) {
+    const c = estado.cartasMesa[j]
+    if (!c) continue
+    const f = hayVira ? fuerzaCarta(c, viraPalo) : (c.palo !== subviraPalo ? -1 : ORDEN_SUBVIRA.indexOf(c.valor))
+    if (f > maxF) { maxF = f; idGanadora = c.id; jugadorGanador = j }
   }
+}
 
  const jugar = (accion: Accion) => {
   if (bloqueado) return
@@ -455,6 +674,8 @@ useEffect(() => {
     }
   } catch (_) {}
 }
+
+
 
 if (mostrarSorteo && estado.cartaSorteo) {
   return (
@@ -486,6 +707,9 @@ const cartaInicialBaza  = estado.cartasMesa[estado.jugadorInicioBaza]
 const cartasLegalesMano = cartasLegalesEnBaza(estado.manos[0], cartaInicialBaza, estado.vira.palo)
 const idsLegales        = new Set(cartasLegalesMano.map(c => c.id))
 
+
+
+
 const puedeBocaAbajo = (
   estado.fase === 3 &&
   estado.jugadorInicioBaza !== 0 &&
@@ -493,31 +717,39 @@ const puedeBocaAbajo = (
   estado.bazasHistorial.length >= 1
 )
 
+// Detectar en render time si estamos en transición de fase (antes de que el useEffect corra)
+const faseActual = partida.estado.fase
+const hayTransicionFase = faseActual !== faseAnterior.current
+const ocultarManos = repartiendo || hayTransicionFase
+const ocultarVira = (repartiendo || hayTransicionFase) && faseActual === 1
+
    return (
   <Animated.View style={[estilos.juego, { opacity: animPantalla }]}>
       <StatusBar barStyle="light-content" backgroundColor={C.mesa} />
 
       <View style={estilos.marcadorTV}>
-        <View style={estilos.marcadorEquipo}>
-          <Text style={estilos.marcadorNombre}>NOSOTROS</Text>
-          <View style={[estilos.marcadorPuntosBox, { backgroundColor: C.azul }]}>
-<PuntosAnimados valor={estado.puntos[0]} estiloTexto={estilos.marcadorPuntos} />          </View>
-        </View>
-        <View style={estilos.marcadorEquipo}>
-          <View style={[estilos.marcadorPuntosBox, { backgroundColor: C.rojo }]}>
-<PuntosAnimados valor={estado.puntos[1]} estiloTexto={estilos.marcadorPuntos} />          </View>
-          <Text style={estilos.marcadorNombre}>ELLOS</Text>
-        </View>
-        <View style={estilos.marcadorExtra}>
-          <Text style={estilos.marcadorRonda}>R{estado.fase}</Text>
-          {estado.fase === 3 ? (
-            <View style={estilos.bazasBadge}>
-              <Text style={estilos.bazasTexto}>{estado.bazasGanadas[0]}-{estado.bazasGanadas[1]}</Text>
-            </View>
-          ) : null}
-          {estado.valorMano > 1 ? <Text style={estilos.marcadorMultiplicador}>×{estado.valorMano}</Text> : null}
-        </View>
+  <View style={estilos.marcadorEquipo}>
+    <Text style={estilos.marcadorNombre}>NOSOTROS</Text>
+    <View style={[estilos.marcadorPuntosBox, { backgroundColor: C.azul }]}>
+      <PuntosAnimados valor={estado.puntos[0]} estiloTexto={estilos.marcadorPuntos} />
+    </View>
+  </View>
+  <View style={estilos.marcadorEquipo}>
+    <View style={[estilos.marcadorPuntosBox, { backgroundColor: C.rojo }]}>
+      <PuntosAnimados valor={estado.puntos[1]} estiloTexto={estilos.marcadorPuntos} />
+    </View>
+    <Text style={estilos.marcadorNombre}>ELLOS</Text>
+  </View>
+  <View style={estilos.marcadorExtra}>
+    <Text style={estilos.marcadorRonda}>R{estado.fase}</Text>
+    {estado.fase === 3 ? (
+      <View style={estilos.bazasBadge}>
+        <Text style={estilos.bazasTexto}>{estado.bazasGanadas[0]}-{estado.bazasGanadas[1]}</Text>
       </View>
+    ) : null}
+    {estado.valorMano > 1 ? <Text style={estilos.marcadorMultiplicador}>×{estado.valorMano}</Text> : null}
+  </View>
+</View>
 
       <TouchableOpacity onPress={onVolver} style={estilos.botonVolver}>
         <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 18, fontWeight: '700', marginTop: -2 }}>✕</Text>
@@ -534,13 +766,20 @@ const puedeBocaAbajo = (
               <NombreActivo nombre={NOMBRE_JUGADOR[2]} colorFondo={COLOR_FONDO_JUGADOR[2]} activo={estado.jugadorActual === 2 && !estado.esperandoEnvio} estiloBase={estilos.bannerJugador} />
               {estado.senas[2] !== 'nada' ? <Text style={estilos.senaChip}>{SENA_EMOJI[estado.senas[2]]} {SENA_TEXTO[estado.senas[2]]}</Text> : null}
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-              {estado.manos[2].map((_, i) => (
-                <View key={i} style={{ marginLeft: i > 0 ? (esMovil ? -20 : -30) : 0 }}>
-                  <CartaComp carta={null} boca={false} tamaño="mini" />
-                </View>
-              ))}
-            </View>
+           <View ref={refMano2} style={{ 
+  flexDirection: 'row', 
+  justifyContent: 'center', 
+  minHeight: 75,
+  opacity: ocultarManos ? 0 : 1 
+}}>
+  {estado.manos[2].map((_, i) => (
+  
+
+    <View key={i} style={{ marginLeft: i > 0 ? (esMovil ? -20 : -30) : 0 }}>
+      <CartaComp carta={null} boca={false} tamaño="mini" />
+    </View>
+  ))}
+</View>
           </View>
         </View>
 
@@ -551,18 +790,18 @@ const puedeBocaAbajo = (
             ) : null}
             
             <NombreActivo nombre={NOMBRE_JUGADOR[1]} colorFondo={COLOR_FONDO_JUGADOR[1]} activo={estado.jugadorActual === 1 && !estado.esperandoEnvio} estiloBase={estilos.bannerJugadorSide} />
-            <View style={[estilos.manoRivalContainer, { paddingTop: esMovil ? 10 : 20 }]}>
-              {estado.manos[1].map((_, i) => (
-                <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
-                  <CartaComp carta={null} boca={false} tamaño="mini" />
-                </View>
-              ))}
-            </View>
+<View ref={refMano1} style={[estilos.manoRivalContainer, { paddingTop: esMovil ? 10 : 20, opacity: ocultarManos ? 0 : 1 }]}>
+  {estado.manos[1].map((_, i) => (
+    <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
+      <CartaComp carta={null} boca={false} tamaño="mini" />
+    </View>
+  ))}
+</View>
           </View>
 <View style={estilos.mesaCentro}>
-  <View style={{ position: 'absolute', zIndex: 0 }}>
+  <View style={{ position: 'absolute', zIndex: 0, opacity: ocultarVira ? 0 : 1 }}>
     <View style={{ borderWidth: 3, borderColor: C.amarillo, borderRadius: 10 }}>
-      <CartaComp carta={estado.vira} tamaño="normal" seleccionable={false} />
+      <CartaFlip carta={estado.vira} revelar={viraRevelada} tamaño="normal" />
     </View>
   </View>
 
@@ -585,36 +824,42 @@ const puedeBocaAbajo = (
   </View>
 
   {/* Rival 2 (izq) y Rival 1 (der) */}
-  <View style={[estilos.mesaFila, { justifyContent: 'center', zIndex: 1 }]}>
-    {estado.cartasMesa[1] ? (
-      estado.cartasMesaBocaAbajo[1] ? (
-        <CartaComp carta={null} boca={false} tamaño="normal" />
+  <View style={[estilos.mesaFila, { justifyContent: 'center', alignItems: 'center', zIndex: 1 }]}>
+    <View style={{ width: esMovil ? 56 : 70, alignItems: 'flex-end' }}>
+      {estado.cartasMesa[1] ? (
+        estado.cartasMesaBocaAbajo[1] ? (
+          <CartaComp carta={null} boca={false} tamaño="normal" />
+        ) : (
+          <CartaComp
+            carta={estado.cartasMesa[1]}
+            tamaño="normal"
+            destacada={cartasNuevas.has(estado.cartasMesa[1]!.id)}
+            ganadora={estado.cartasMesa[1]!.id === idGanadora}
+          />
+        )
       ) : (
-        <CartaComp
-          carta={estado.cartasMesa[1]}
-          tamaño="normal"
-          destacada={cartasNuevas.has(estado.cartasMesa[1]!.id)}
-          ganadora={estado.cartasMesa[1]!.id === idGanadora}
-        />
-      )
-    ) : (
-      <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />
-    )}
+        <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />
+      )}
+    </View>
+
     <View style={{ width: esMovil ? 80 : 100 }} />
-    {estado.cartasMesa[3] ? (
-      estado.cartasMesaBocaAbajo[3] ? (
-        <CartaComp carta={null} boca={false} tamaño="normal" />
+
+    <View style={{ width: esMovil ? 56 : 70, alignItems: 'flex-start' }}>
+      {estado.cartasMesa[3] ? (
+        estado.cartasMesaBocaAbajo[3] ? (
+          <CartaComp carta={null} boca={false} tamaño="normal" />
+        ) : (
+          <CartaComp
+            carta={estado.cartasMesa[3]}
+            tamaño="normal"
+            destacada={cartasNuevas.has(estado.cartasMesa[3]!.id)}
+            ganadora={estado.cartasMesa[3]!.id === idGanadora}
+          />
+        )
       ) : (
-        <CartaComp
-          carta={estado.cartasMesa[3]}
-          tamaño="normal"
-          destacada={cartasNuevas.has(estado.cartasMesa[3]!.id)}
-          ganadora={estado.cartasMesa[3]!.id === idGanadora}
-        />
-      )
-    ) : (
-      <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />
-    )}
+        <View style={[estilos.hueco, { width: esMovil ? 46 : 56, height: esMovil ? 66 : 80 }]} />
+      )}
+    </View>
   </View>
 
   {/* Tú (abajo) */}
@@ -641,13 +886,13 @@ const puedeBocaAbajo = (
             ) : null}
             
             <NombreActivo nombre={NOMBRE_JUGADOR[3]} colorFondo={COLOR_FONDO_JUGADOR[3]} activo={estado.jugadorActual === 3 && !estado.esperandoEnvio} estiloBase={estilos.bannerJugadorSide} />
-            <View style={[estilos.manoRivalContainer, { paddingTop: esMovil ? 10 : 20 }]}>
-              {estado.manos[3].map((_, i) => (
-                <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
-                  <CartaComp carta={null} boca={false} tamaño="mini" />
-                </View>
-              ))}
-            </View>
+<View ref={refMano3} style={[estilos.manoRivalContainer, { paddingTop: esMovil ? 10 : 20, opacity: ocultarManos ? 0 : 1 }]}>
+  {estado.manos[3].map((_, i) => (
+    <View key={i} style={{ marginTop: i > 0 ? (esMovil ? -30 : -45) : 0 }}>
+      <CartaComp carta={null} boca={false} tamaño="mini" />
+    </View>
+  ))}
+</View>
           </View>
         </View>
 
@@ -679,9 +924,20 @@ const puedeBocaAbajo = (
   </View>
 ) : null}
 
-            <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-{estado.manos[0].map((carta, index) => {
-  const jugable  = !bloqueado && partida.esTurnoHumano && !estado.esperandoEnvio
+<View
+  ref={refMano0}
+  style={{ 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    flexWrap: 'nowrap',
+    marginBottom: 12, 
+    minHeight: 110,
+    opacity: ocultarManos ? 0 : 1,
+  }}
+>
+  {estado.manos[0].map((carta, index) => {
+    
+    const jugable  = !bloqueado && partida.esTurnoHumano && !estado.esperandoEnvio
   const esIlegal = !idsLegales.has(carta.id)
   return (
 <View
@@ -764,10 +1020,68 @@ const puedeBocaAbajo = (
           </View>
         </View>
       ) : null}
+ {/* Mazo siempre visible durante la partida */}
+<View
+  style={{
+    position: 'absolute',
+    left: posicionMazo.left,
+    top: posicionMazo.top,
+    zIndex: 500,
+    pointerEvents: 'none',
+    opacity: mesaLista ? 1 : 0,   // 👈 aparece justo cuando arranca el reparto
+  }}
+>
+
+  <View style={{ position: 'absolute', top: -6, left: -6 }}>
+    <CartaComp carta={null} boca={false} tamaño="normal" />
+  </View>
+  <View style={{ position: 'absolute', top: -3, left: -3 }}>
+    <CartaComp carta={null} boca={false} tamaño="normal" />
+  </View>
+  <CartaComp carta={null} boca={false} tamaño="normal" />
+</View>
+
+{/* Cartas volando desde el mazo solo durante el reparto */}
+{repartiendo ? (
+  <>
+    {cartasRepartiendo.map(c => {
+  const destino = c.esVira
+    ? destinoVira()
+    : destinoJugador(c.jugador, c.indice ?? 0, c.total ?? 1)
+  // Tamaño que tendrá la carta cuando aterrice
+  const tamañoFinal: 'mini' | 'normal' | 'grande' =
+    c.esVira ? 'normal' :
+    c.jugador === 0 ? 'grande' :
+    'mini'
+  return (
+    <Animated.View
+      key={c.key}
+      style={{
+        position: 'absolute',
+        left: posicionMazo.left,
+        top: posicionMazo.top,
+        zIndex: 600,
+        pointerEvents: 'none',
+        transform: [
+          { translateX: c.anim.interpolate({ inputRange: [0, 1], outputRange: [0, destino.x] }) },
+          { translateY: c.anim.interpolate({ inputRange: [0, 1], outputRange: [0, destino.y] }) },
+          {
+            scale: c.anim.interpolate({
+              inputRange: [0, 0.6, 1],
+              outputRange: [0.78, 0.95, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      <CartaComp carta={null} boca={false} tamaño={tamañoFinal} />
+    </Animated.View>
+ )
+    })}
+  </>
+) : null}
     </Animated.View>
   )
 }
-
-
 
 export default PantallaJuego

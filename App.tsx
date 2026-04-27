@@ -10,6 +10,17 @@ import PantallaJuego from './src/screens/PantallaJuego'
 
 
 
+import { LogBox } from 'react-native'
+LogBox.ignoreLogs(['Unexpected text node'])
+if (typeof window !== 'undefined') {
+  const orig = console.error
+  console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].includes('Unexpected text node')) return
+    orig(...args)
+  }
+}
+
+
 const C = {
   mesa: '#1a6b3c', mesaDark: '#145530', oro: '#d4af37',
   rojo: '#c0392b', carta: '#fdfaf0', cartaBorde: '#c8b97a',
